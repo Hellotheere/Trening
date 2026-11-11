@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Playwright: last appen under /Train/, onboarding, mandagsplan, logg, persistens."""
+"""Playwright: last appen under /Trening/, onboarding, mandagsplan, logg, persistens."""
 from __future__ import annotations
 
 import os
@@ -23,7 +23,7 @@ def start_server():
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     host, port = httpd.server_address
-    return httpd, f"http://127.0.0.1:{port}/Train/"
+    return httpd, f"http://127.0.0.1:{port}/Trening/"
 
 
 def main():

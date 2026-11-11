@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tjen den statiske appen under /Train/, slik GitHub Pages gjør."""
+"""Tjen den statiske appen under /Trening/, slik GitHub Pages gjør."""
 from __future__ import annotations
 
 import argparse
@@ -9,7 +9,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
-PREFIX = "/Train"
+PREFIX = "/Trening"
 
 
 class TrainHandler(http.server.SimpleHTTPRequestHandler):

@@ -32,15 +32,15 @@ Alle lenker i appen er relative, slik at den også virker under undermappen `/Tr
 
 ## Utvikling og tester
 
-Tjen filene under en `/Train/`-sti, for eksempel:
+Tjen filene under en `/Trening/`-sti, for eksempel:
 
 ```bash
 python tests/serve.py
 ```
 
-Deretter åpner du `http://127.0.0.1:8765/Train/`.
+Deretter åpner du `http://127.0.0.1:8765/Trening/`.
 
-Kjør testene (Node-sjekk av planlogikk + Playwright mot `/Train/`):
+Kjør testene (Node-sjekk av planlogikk + Playwright mot `/Trening/`):
 
 ```bash
 node tests/test_engine.js
