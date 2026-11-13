@@ -389,6 +389,32 @@ test("treneren kjenner dagens økt og benk-loggen", () => {
   assert(/protein/i.test(food));
 });
 
+test("progresjon skiller overkropp, bein og deload", () => {
+  const upper = { id: "benk", name: "Benkpress", reps: "8–12", muscle: "bryst" };
+  const lower = { id: "kneboy_kv", name: "Knebøy", reps: "8–12", muscle: "bein" };
+  const hit = (id, name, reps) => [{
+    date: "2026-11-02", completed: true,
+    exercises: [{ id, name, sets: [1, 2, 3].map(() => ({ reps, weight_kg: 80, done: true })) }],
+  }];
+  const up = T.overloadHint(upper, T.lastPerformance(hit("benk", "Benkpress", 12)).benk);
+  assert.strictEqual(up.suggest_kg, 82.5);
+  const low = T.overloadHint(lower, T.lastPerformance(hit("kneboy_kv", "Knebøy", 12)).kneboy_kv);
+  assert.strictEqual(low.suggest_kg, 85);
+  const misses = [
+    { date: "2026-11-01", exercises: [{ id: "benk", sets: [{ reps: 4, weight_kg: 80, done: true }] }] },
+    { date: "2026-11-08", exercises: [{ id: "benk", sets: [{ reps: 5, weight_kg: 80, done: true }] }] },
+  ];
+  const ex = { id: "benk", reps: "8–12", muscle: "bryst", misses: T.achievements ? 2 : 2 };
+  ex.misses = 2;
+  const down = T.overloadHint(ex, T.lastPerformance(misses).benk);
+  assert.strictEqual(down.kind, "deload");
+  assert.strictEqual(down.suggest_kg, 77.5);
+  const plates = T.platesFor(60);
+  assert(plates.label.includes("20"));
+  const badges = T.achievements({ workouts: [{ completed: true, date: "2026-11-13", exercises: [] }], plan: { days: [] } });
+  assert(badges.some((b) => b.id === "forste"));
+});
+
 test("ukedag følger kalenderen, mandag først, også søndag", () => {
   const cases = [
     ["2026-11-09", "mandag", 1],

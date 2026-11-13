@@ -611,7 +611,7 @@
       const iso = cursor;
       const kind = (planned[iso] || {}).kind;
       if (completed.has(iso)) streak += 1;
-      else if (kind === "hvile") { /* skip rest */ }
+      else if (kind === "hvile" || (planned[iso] && !(planned[iso].exercises || []).length)) { /* planlagt hvile bryter ikke streaken */ }
       else {
         if (cursor === today) { cursor = addDays(cursor, -1); continue; }
         break;
@@ -977,6 +977,17 @@
   }
 
   function programAwareReply(raw, text, state, plan) {
+    if (/kardio|kondis|løping|jogg|puls/.test(text)) {
+      return "Kondisjon kan være rolig: 20–40 minutter der du fortsatt kan snakke i korte setninger. To slike økter i uka er nok ved siden av styrken. Øk bare noen minutter om gangen. Ved brystsmerter eller svimmelhet stopper du og kontakter lege.";
+    }
+    if (/hjemme|uten utstyr|kroppsvekt|leilighet/.test(text)) {
+      return "Hjemme uten utstyr holder det med armhevinger (gjerne på knærne), knebøy til en stol, hoftehev, planke og en gåtur. Tre runder med 8–12 repetisjoner er en hel økt. Når det blir lett, sakker du tempoet eller tar én repetisjon mer.";
+    }
+    if (/hvordan gikk uka|ukesoppsummering|oppsummer uka|denne uka/.test(text)) {
+      const sum = weeklySummary(state);
+      return "Denne uka har du fullført " + sum.done + (sum.planned ? " av omtrent " + sum.planned + " planlagte økter" : " økter") +
+        " og løftet et volum på ca. " + sum.volume + ". Hviledager er en del av planen. Neste uke: møt opp, og øk bare der alle settene traff toppen av repetisjonene.";
+    }
     if (/trene i dag|dagens økt|hva skal jeg trene|skal jeg trene i dag/.test(text)) {
       const sess = todaySession(plan);
       if (!sess) return "Jeg finner ikke en plan for i dag ennå.";
@@ -1101,6 +1112,51 @@
       if (prev) return techniqueReply(prev);
     }
     return fallbackReply(raw);
+  }
+
+  function platesFor(targetKg, barKg) {
+    const bar = Number(barKg) > 0 ? Number(barKg) : 20;
+    let side = (Number(targetKg) - bar) / 2;
+    const sizes = [25, 20, 15, 10, 5, 2.5, 1.25];
+    const perSide = [];
+    if (!(side > 0)) return { bar, perSide, label: "Stang " + bar + " kg" };
+    for (const size of sizes) {
+      let n = 0;
+      while (side + 0.001 >= size) { side -= size; n += 1; }
+      if (n) perSide.push({ kg: size, count: n });
+    }
+    const bits = perSide.map((p) => p.count + "×" + String(p.kg).replace(".", ",") + " kg");
+    return { bar, perSide, label: "Stang " + bar + " kg" + (bits.length ? " + " + bits.join(" + ") + " hver side" : "") };
+  }
+
+  function achievements(state) {
+    const workouts = (state && state.workouts) || [];
+    const done = workouts.filter((w) => w.completed).length;
+    const prs = Object.keys(personalRecords(workouts)).length;
+    const streak = progressStats(state || {}).streak;
+    const badges = [];
+    if (done >= 1) badges.push({ id: "forste", title: "Første økt", text: "Du møtte opp." });
+    if (done >= 4) badges.push({ id: "fire", title: "Fire økter", text: "Vanen er i gang." });
+    if (done >= 12) badges.push({ id: "tolv", title: "Tolv økter", text: "Dette er treningen din nå." });
+    if (prs >= 1) badges.push({ id: "rekord", title: "Rekordbok", text: "Minst én personlig rekord." });
+    if (streak >= 3) badges.push({ id: "streak", title: "Tre på rad", text: "Hviledager teller ikke imot deg." });
+    return badges;
+  }
+
+  function weeklySummary(state, today) {
+    today = today || todayOslo();
+    const start = mondayOf(today);
+    const end = addDays(start, 6);
+    const workouts = ((state && state.workouts) || []).filter((w) => w.date >= start && w.date <= end);
+    const done = workouts.filter((w) => w.completed).length;
+    let volume = 0;
+    for (const w of workouts) {
+      for (const ex of w.exercises || []) {
+        for (const s of ex.sets || []) if (s.done) volume += (Number(s.reps) || 0) * (Number(s.weight_kg) || 1);
+      }
+    }
+    const planned = ((state && state.plan && state.plan.days) || []).filter((d) => isTrainingDay(d)).length;
+    return { start, end, done, planned, volume: Math.round(volume) };
   }
 
   function coachBackend() { return "regler"; }
@@ -1336,6 +1392,26 @@
     return Number.isInteger(v) ? String(v) : String(v);
   }
 
+  function missStreak(logs, id, bounds) {
+    if (!bounds || !id) return 0;
+    const low = bounds[0];
+    const hits = [];
+    for (const sess of logs || []) {
+      for (const ex of sess.exercises || []) {
+        if (ex.id !== id) continue;
+        const done = doneSets(ex);
+        if (done.length) hits.push(done);
+      }
+    }
+    let n = 0;
+    for (let i = hits.length - 1; i >= 0; i--) {
+      const reps = hits[i].map((s) => Number(s.reps) || 0);
+      if (reps.length && reps.every((r) => r < low)) n += 1;
+      else break;
+    }
+    return n;
+  }
+
   function overloadHint(ex, last) {
     if (!last || !(last.sets || []).length) return null;
     const bounds = rangeBounds(ex.reps || DEFAULT_REPS);
@@ -1349,10 +1425,18 @@
     const date = last.date;
     const prettyReps = lastReps.join(", ");
     let suggest, text, kind;
+    const lower = new Set(["bein", "sete", "bakside", "legg"]);
+    const muscle = ex.muscle || ((EXERCISES[ex.id] || {}).muscle);
+    const step = lower.has(muscle) ? 5 : 2.5;
+    const stepLabel = step === 5 ? "5 kg" : "2,5 kg";
     if (lastKg && reps.every((r) => r >= high)) {
-      suggest = Math.round((lastKg + 2.5) * 2) / 2;
-      text = `Du klarte ${high} reps på alle sett – prøv +2,5 kg neste gang`;
+      suggest = Math.round((lastKg + step) * 2) / 2;
+      text = `Du klarte ${high} reps på alle sett – prøv +${stepLabel} neste gang`;
       kind = "increase_weight";
+    } else if (lastKg && reps.every((r) => r < low) && Number(ex.misses || last.misses || 0) >= 2) {
+      suggest = Math.max(step, Math.round((lastKg - step) * 2) / 2);
+      text = `Flere økter under ${low} reps. Ta av ${stepLabel} og bygg deg opp igjen med ren teknikk.`;
+      kind = "deload";
     } else if (lastKg && reps.every((r) => r >= low)) {
       suggest = lastKg;
       text = `Forrige: ${fmtKg(lastKg)} × ${prettyReps}. Prøv én repetisjon mer neste gang, eller bli på samme vekt til alle sett er ${high}.`;
@@ -1380,6 +1464,7 @@
       const ex = clone(raw);
       const eid = ex.id;
       const perf = last[eid];
+      ex.misses = missStreak(logs, eid, rangeBounds(ex.reps || DEFAULT_REPS));
       const hint = overloadHint(ex, perf);
       const rec = prs[eid];
       if (hint) {
@@ -1447,6 +1532,13 @@
   }
 
   function migrateState(state) {
+    if (!state.prefs || typeof state.prefs !== "object") state.prefs = { units: "kg", rest_sec: 90, theme: "dark" };
+    else {
+      if (!state.prefs.units) state.prefs.units = "kg";
+      if (!state.prefs.rest_sec) state.prefs.rest_sec = 90;
+      if (!state.prefs.theme) state.prefs.theme = "system";
+    }
+    if (!state.day_marks) state.day_marks = {};
     if (!state.plan_source) state.plan_source = "generated";
     if (!state.custom_plan || !(state.custom_plan.days || []).length) {
       state.custom_plan = defaultCustomPlan();
@@ -1555,6 +1647,7 @@
     TrenerError, todayOslo, mondayOf, weekdayName, addDays, midReps, bumpReps, weekVolume,
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
     todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
+    platesFor, achievements, weeklySummary,
     library, mondayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,

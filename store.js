@@ -130,6 +130,11 @@
       library: T.library(),
       today: T.todaySession(plan, today),
       progress,
+      prefs: state.prefs || { units: "kg", rest_sec: 90, theme: "dark" },
+      active_workout: state.active_workout || null,
+      day_marks: state.day_marks || {},
+      badges: T.achievements(state),
+      week: T.weeklySummary(Object.assign({}, state, { plan })),
       checkins: (state.checkins || []).slice(-8),
       chat: (state.chat || []).slice(-20),
       workouts: recentWorkouts(state),
@@ -254,14 +259,25 @@
     if (exercisesIn.length) {
       current.exercises = exercisesIn.map((ex) => ({
         id: String(ex.id || "").slice(0, 64),
-        sets: (ex.sets || []).slice(0, 8).map((s) => ({
-          reps: s.reps === "" || s.reps == null ? null : Number(s.reps),
-          weight_kg: s.weight_kg === "" || s.weight_kg == null ? null : Number(String(s.weight_kg).replace(",", ".")),
-          done: !!s.done,
-        })),
+        note: String(ex.note || "").slice(0, 200),
+        superset: !!ex.superset,
+        sets: (ex.sets || []).slice(0, 10).map((s) => {
+          const row = {
+            reps: s.reps === "" || s.reps == null ? null : Number(s.reps),
+            weight_kg: s.weight_kg === "" || s.weight_kg == null ? null : Number(String(s.weight_kg).replace(",", ".")),
+            done: !!s.done,
+          };
+          if (s.rpe != null && s.rpe !== "") row.rpe = Number(s.rpe);
+          return row;
+        }),
       }));
     }
-    if (body.action === "complete" || body.completed) current.completed = true;
+    if (body.action === "complete" || body.completed) {
+      current.completed = true;
+      state.active_workout = null;
+    } else if (body.draft) {
+      state.active_workout = body.draft;
+    }
     state.workouts = workouts.slice(-80);
     save(state);
     return publicView(state);
@@ -334,13 +350,51 @@
     return publicView(parsed);
   }
 
+  function savePrefs(body) {
+    const state = requireState();
+    state.prefs = Object.assign({ units: "kg", rest_sec: 90, theme: "system" }, state.prefs || {}, body || {});
+    if (body && body.rest_sec) state.prefs.rest_sec = Math.max(15, Math.min(300, Number(body.rest_sec) || 90));
+    save(state);
+    return publicView(state);
+  }
+
+  function swapDays(body) {
+    const state = requireState();
+    const a = String((body && body.from) || "");
+    const b = String((body && body.to) || "");
+    const plan = (state.plan_source === "custom" ? state.custom_plan : state.plan) || {};
+    const days = plan.days || [];
+    const da = days.find((d) => d.weekday === a);
+    const db = days.find((d) => d.weekday === b);
+    if (!da || !db) throw new TrenerError("Fant ikke dagene.");
+    for (const key of ["title", "blurb", "kind", "exercises"]) {
+      const tmp = da[key];
+      da[key] = db[key];
+      db[key] = tmp;
+    }
+    save(state);
+    return publicView(state);
+  }
+
+  function markDay(body) {
+    const state = requireState();
+    const date = String((body && body.date) || "").slice(0, 10);
+    const mark = String((body && body.mark) || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new TrenerError("Ugyldig dato.");
+    state.day_marks = state.day_marks || {};
+    if (mark === "done" || mark === "skipped") state.day_marks[date] = mark;
+    else delete state.day_marks[date];
+    save(state);
+    return publicView(state);
+  }
+
   function reset() {
     localStorage.removeItem(KEY);
     try { localStorage.removeItem(LEGACY_TOKEN); } catch {}
   }
 
   const api = {
-    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom,
+    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay,
     exportJSON, importJSON, reset, publicView, formatError, TrenerError,
   };
   if (typeof globalThis !== "undefined") globalThis.TrenerStore = api;
