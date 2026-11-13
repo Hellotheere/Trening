@@ -369,6 +369,43 @@ test("treneren tåler skrivefeil, engelsk og oppfølging", () => {
   assert.strictEqual(examples.length, 3);
 });
 
+test("ukedag følger kalenderen, mandag først, også søndag", () => {
+  const cases = [
+    ["2026-11-09", "mandag", 1],
+    ["2026-11-10", "tirsdag", 2],
+    ["2026-11-11", "onsdag", 3],
+    ["2026-11-12", "torsdag", 4],
+    ["2026-11-13", "fredag", 5],
+    ["2026-11-14", "lørdag", 6],
+    ["2026-11-15", "søndag", 0],
+  ];
+  for (const [iso, name, sunday0] of cases) {
+    assert.strictEqual(new Date(iso + "T00:00:00Z").getUTCDay(), sunday0, iso);
+    assert.strictEqual(T.weekdayName(iso), name, iso);
+    // getDay()/getUTCDay() Sunday=0 must not be used as an index into a Monday-first week.
+    if (sunday0 === 0) assert.strictEqual(T.DAYS[sunday0], "mandag");
+    assert.notStrictEqual(name === "søndag" ? "mandag" : name, name === "søndag" ? T.weekdayName(iso) : "søndag");
+  }
+  const state = { profile: profile(), plan_source: "custom", custom_plan: T.defaultCustomPlan(), workouts: [] };
+  const plan = T.resolvePlan(state, "2026-11-13");
+  for (const [iso, name] of cases) {
+    const day = T.todaySession(plan, iso);
+    assert.strictEqual(day.date, iso, iso);
+    assert.strictEqual(day.weekday, name, iso);
+  }
+  const friday = T.todaySession(plan, "2026-11-13");
+  assert.strictEqual(friday.weekday, "fredag");
+  assert.strictEqual(friday.exercises.length, 0);
+  assert.strictEqual(T.isTrainingDay(friday), false);
+  const next = T.nextTrainingDay(plan, "2026-11-13");
+  assert.strictEqual(next.weekday, "mandag");
+  assert.strictEqual(next.title, "Bryst, armer og skuldre");
+  const sunday = T.todaySession(plan, "2026-11-15");
+  assert.strictEqual(sunday.weekday, "søndag");
+  assert.notStrictEqual(sunday.weekday, "mandag");
+  assert.strictEqual(T.nextTrainingDay(plan, "2026-11-15").weekday, "mandag");
+});
+
 test("bump_reps holder seg i området", () => {
   assert.strictEqual(T.midReps("8–12"), 10);
   assert.strictEqual(T.bumpReps("8–12", 1), "9–13");

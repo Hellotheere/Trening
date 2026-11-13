@@ -64,8 +64,10 @@
   }
 
   function weekdayIndex(iso) {
+    // Date.getUTCDay() is Sunday=0. Shift so Monday is 0 and Sunday is 6.
     const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
-    return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+    const sunday0 = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+    return (sunday0 + 6) % 7;
   }
 
   function mondayOf(iso) {
@@ -549,10 +551,51 @@
 
   function todaySession(plan, day) {
     const iso = day || todayOslo();
-    for (const d of (plan && plan.days) || []) if (d.date === iso) return d;
+    const days = (plan && plan.days) || [];
+    for (const d of days) if (d.date === iso) return d;
     const name = weekdayName(iso);
-    for (const d of (plan && plan.days) || []) if (d.weekday === name) return d;
+    for (const d of days) if (d.weekday === name) return d;
     return null;
+  }
+
+  function isTrainingDay(day) {
+    return !!(day && day.kind !== "hvile" && (day.exercises || []).length);
+  }
+
+  function nextTrainingDay(plan, day) {
+    const days = (plan && plan.days) || [];
+    if (!days.length) return null;
+    const iso = day || todayOslo();
+    let idx = days.findIndex((d) => d.date === iso);
+    if (idx < 0) idx = days.findIndex((d) => d.weekday === weekdayName(iso));
+    if (idx < 0) idx = weekdayIndex(iso);
+    for (let step = 1; step <= days.length; step++) {
+      const candidate = days[(idx + step) % days.length];
+      if (isTrainingDay(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  function alignToCurrentWeek(plan, today) {
+    plan = clone(plan || {});
+    const start = mondayOf(today || todayOslo());
+    const byName = {};
+    for (const day of plan.days || []) {
+      if (day && DAYS.includes(day.weekday)) byName[day.weekday] = day;
+    }
+    plan.days = DAYS.map((name, i) => {
+      const src = byName[name] || {
+        weekday: name, kind: "hvile", title: "Ingen økt", blurb: "", exercises: [],
+      };
+      const day = clone(src);
+      day.date = addDays(start, i);
+      day.weekday = name;
+      day.weekday_short = DAY_SHORT[i];
+      if (!day.exercises) day.exercises = [];
+      return day;
+    });
+    plan.week_start = start;
+    return plan;
   }
 
   function progressStats(state, today) {
@@ -1338,6 +1381,7 @@
       const d = addDays(start, i);
       const day = clone(src);
       day.date = d;
+      day.weekday = DAYS[i];
       day.weekday_short = DAY_SHORT[i];
       day.exercises = annotateExercises(day.exercises || [], logs);
       if (!day.exercises.length) day.kind = "hvile";
@@ -1375,7 +1419,7 @@
       const week = Number((state.plan || {}).week || 1);
       return materializeCustomPlan(state.custom_plan || {}, { start: today, logs, profile: state.profile, week, notes });
     }
-    const plan = annotatePlan(state.plan || {}, logs);
+    const plan = alignToCurrentWeek(annotatePlan(state.plan || {}, logs), today);
     plan.source = "generated";
     return plan;
   }
@@ -1462,7 +1506,7 @@
     SAFETY, DAYS, DAY_SHORT, GOALS, LEVELS, EQUIPMENT, EXERCISES,
     TrenerError, todayOslo, mondayOf, weekdayName, addDays, midReps, bumpReps, weekVolume,
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
-    todaySession, progressStats, ruleReply, coachReply, coachBackend,
+    todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
     library, mondayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,
