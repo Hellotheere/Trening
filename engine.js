@@ -606,145 +606,410 @@
     };
   }
 
-  const RE = {
-    injury: /\b(vondt|smerte|skad|brudd|hevelse|hoven|knip i bryst|svimmel|besvim|pustevansk|hjerte)\b/iu,
-    knee: /\bkne\b|\bknær|\bkneet/iu,
-    back: /\bryggen\b|\bkorsrygg|\blynderygg/iu,
-    shoulder: /\bskulder|\bskuldra/iu,
-    weight: /øke vekt|legge på|tyngre|for lett|for tung|progressive/iu,
-    sore: /støl|stølhet|øm|cølhet|sore|doms/iu,
-    food: /spise|måltid|kcal|kalor|protein|matplan|sulten|sulte/iu,
-    skip: /hoppe over|hoppa over|slappet|slapp av|ikke trent|missa|missed|skip/iu,
-    how: /hvordan|teknikk|utfør|gjør jeg|forklar/iu,
-    plan: /\bplan\b|hvorfor denne|hvorfor akkurat|hva er økten|ukesplan/iu,
-    rest: /\bhvile|\bhviledag|sove|søvn/iu,
-    motiv: /orke|motivas|gidder|lei|tung dag|gi opp/iu,
-    chest: /bryst|svimmel|besvim|pust|hjerte/iu,
-    pain: /vondt|smerte|skad/iu,
-    why: /hvorfor|forklar planen|hva skal jeg/iu,
+  const EXERCISE_ALIASES = {
+    kneboy_kv: ["squat", "squats", "back squat", "kneboy", "kneboey"],
+    goblet: ["goblet squat", "goblet kneboy"],
+    benk: ["bench", "bench press", "benchpress", "benkpress", "benk press", "benkpres", "flat bench"],
+    armhev: ["push up", "push ups", "pushup", "pushups", "push-ups", "armheving", "armhevninger"],
+    markloft: ["deadlift", "dead lift", "deadlifts", "markloft", "mark loft", "markloftt"],
+    rdl: ["romanian deadlift", "rumensk deadlift"],
+    nedtrekk: ["lat pulldown", "pulldown", "lat pull down", "latsdrag"],
+    skulderpress: ["shoulder press", "overhead press", "ohp", "militarpress", "skulderpres"],
+    roing: ["row", "rows", "bent over row", "barbell row", "stangroing"],
+    sittende_roing: ["seated row", "cable row", "kabelroing"],
+    lateral: ["lateral raise", "side lateral"],
+    biceps: ["curl", "curls", "biceps curl", "dumbbell curl"],
+    triceps: ["skullcrusher", "triceps extension"],
+    triceps_pushdown: ["pushdown", "triceps pushdown", "rope pushdown"],
+    maskin_brystpress: ["chest press", "machine chest press", "brystpress"],
+    incline_manualpress: ["incline press", "incline bench", "incline dumbbell press"],
+    pec_fly_maskin: ["pec fly", "pec deck", "chest fly", "flyes", "pecfly"],
+    preacher_curl: ["preacher", "preacher curl"],
+    incline_biceps: ["incline curl", "incline biceps"],
+    reverse_pec_fly: ["reverse fly", "rear delt", "bakre skulder"],
+    front_raise: ["front raise"],
+    hip_thrust: ["hipthrust", "hip thrusts"],
+    glute_bridge: ["glute bridge"],
+    leg_press: ["leg press"],
+    leg_curl: ["leg curl", "hamstring curl", "larcurl"],
+    calf: ["calf raise", "calf raises"],
+    planke: ["plank"],
+    jogg: ["jogging", "running"],
+    farmers: ["farmer walk", "farmers walk"],
+    face_pull: ["facepull", "face pulls"],
+    dips_stol: ["bench dip", "chair dip", "dips"],
+    wall_sit: ["wall sit"],
+    burpee: ["burpees"],
+    jumping_jacks: ["jumping jack"],
+    mountain: ["mountain climber", "mountain climbers"],
+    dead_bug: ["deadbug"],
+    sykkel: ["bike", "erg", "romaskin"],
+    utfall: ["lunge", "lunges", "forward lunge"],
   };
 
-  function findExercise(text) {
-    const t = text.toLowerCase();
-    let best = null;
-    for (const ex of Object.values(EXERCISES)) {
-      const name = ex.name.toLowerCase();
-      const first = name.split(/\s+/)[0];
-      if (t.includes(name) || (t.includes(first) && first.length > 4)) {
-        best = ex;
-        if (t.includes(name)) return ex;
+  const PULLUP = {
+    id: "pullups",
+    name: "Pull-ups / chins",
+    muscle: "rygg",
+    desc: "Heng i en stang med skulderbredde eller litt bredere for pull-ups, og smalere underhåndsgrep for chins. Start med strake armer og stram midje. Trekk albuene ned og brystet mot stangen til haken er over. Senk deg rolig helt ned.",
+    tips: "Klarer du ikke en hel: hopp opp og senk deg sakte, eller tren nedtrekk i maskin til du blir sterkere.",
+    aliases: ["pull up", "pull ups", "pullups", "pull-ups", "chin", "chins", "chin up", "chin ups", "chinups", "chin-ups"],
+  };
+
+  const CHAT_STOP = new Set([
+    "plan", "planen", "maten", "mat", "vekt", "vekta", "reps", "sett", "settet",
+    "hei", "hey", "hi", "hello", "hallo", "takk", "hvile", "trening", "treningen",
+    "protein", "kalorier", "okt", "okten", "ovelse", "ovelsen", "teknikk",
+  ]);
+
+  let exerciseCatalog = null;
+
+  function softText(s) {
+    return String(s || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9æøå\s]+/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function foldText(s) {
+    return softText(s)
+      .replace(/æ/g, "ae")
+      .replace(/ø/g, "o")
+      .replace(/å/g, "a");
+  }
+
+  function squashText(s) {
+    return foldText(s).replace(/ /g, "");
+  }
+
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    if (!a) return b.length;
+    if (!b) return a.length;
+    let prev = [];
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      const ca = a.charCodeAt(i - 1);
+      for (let j = 1; j <= b.length; j++) {
+        const cost = ca === b.charCodeAt(j - 1) ? 0 : 1;
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
       }
+      prev = cur;
     }
-    const aliases = {
-      "knebøy": "kneboy_kv", squat: "kneboy_kv", "markløft": "markloft",
-      benk: "benk", armhev: "armhev", "push-up": "armhev", pushup: "armhev",
-      planke: "planke", roing: "roing", nedtrekk: "nedtrekk", utfall: "utfall",
-      "hip thrust": "hip_thrust", hoftehev: "glute_bridge",
-      brystpress: "maskin_brystpress", "chest press": "maskin_brystpress",
-      "skråbenk": "incline_manualpress", incline: "incline_manualpress",
-      "pec fly": "pec_fly_maskin", "pec-fly": "pec_fly_maskin",
-      preacher: "preacher_curl", "skrå biceps": "incline_biceps",
-      pushdown: "triceps_pushdown", "triceps pushdown": "triceps_pushdown",
-      lateral: "lateral", sidehev: "lateral",
-      "omvendt pec": "reverse_pec_fly", "bakre skulder": "reverse_pec_fly",
-      fronthev: "front_raise", "front raise": "front_raise",
-    };
-    for (const [a, i] of Object.entries(aliases)) {
-      if (t.includes(a)) return EXERCISES[i];
+    return prev[b.length];
+  }
+
+  function fuzzyLimit(a, b) {
+    const n = Math.max(a.length, b.length);
+    const m = Math.min(a.length, b.length);
+    if (m < 5) return 0;
+    if (n >= 8 && m >= 6) return 2;
+    if (m >= 5) return 1;
+    return 0;
+  }
+
+  function exerciseCatalogEntries() {
+    if (exerciseCatalog) return exerciseCatalog;
+    const list = [];
+    for (const [id, ex] of Object.entries(EXERCISES)) {
+      const aliases = new Set([ex.name, id.replace(/_/g, " "), String(ex.name).replace(/\([^)]*\)/g, " ")]);
+      for (const extra of EXERCISE_ALIASES[id] || []) aliases.add(extra);
+      list.push({
+        id, name: ex.name, desc: ex.desc, tips: ex.tips, muscle: ex.muscle,
+        aliases: [...aliases].filter(Boolean),
+      });
+    }
+    list.push(PULLUP);
+    exerciseCatalog = list;
+    return list;
+  }
+
+  function considerExercise(best, squashed, start, allowFuzzy) {
+    if (!squashed || CHAT_STOP.has(squashed)) return best;
+    for (const entry of exerciseCatalogEntries()) {
+      for (const alias of entry.aliases) {
+        const as = squashText(alias);
+        if (!as || CHAT_STOP.has(as)) continue;
+        const dist = as === squashed ? 0 : (allowFuzzy ? levenshtein(squashed, as) : 99);
+        if (dist !== 0 && (!allowFuzzy || dist > fuzzyLimit(squashed, as))) continue;
+        const score = dist * 1000 - as.length * 10 + start;
+        if (!best || score < best.score) best = { entry, dist, score };
+      }
     }
     return best;
   }
 
-  function ruleReply(message, state) {
-    const text = String(message || "").trim();
-    if (!text) return "Hva lurer du på? Du kan spørre om øvelser, mat, stølhet, eller hvorfor planen ser ut som den gjør.";
-    const profile = (state || {}).profile || {};
-    const plan = (state || {}).plan || {};
-    const name = profile.name || "";
-    const hello = name ? name + ", " : "";
-    if (RE.injury.test(text) && RE.chest.test(text)) {
+  function matchExercise(phrase) {
+    const tokens = foldText(phrase).split(" ").filter(Boolean);
+    if (!tokens.length) return null;
+    let best = null;
+    best = considerExercise(best, tokens.join(""), 0, tokens.length <= 4);
+    if (tokens.length <= 10) {
+      for (let i = 0; i < tokens.length; i++) {
+        const max = Math.min(4, tokens.length - i);
+        for (let n = 1; n <= max; n++) {
+          best = considerExercise(best, tokens.slice(i, i + n).join(""), i, false);
+        }
+      }
+    }
+    return best ? best.entry : null;
+  }
+
+  function userTurns(state) {
+    const chat = (state && state.chat) || [];
+    const out = [];
+    for (const m of chat) {
+      if (!m || m.role !== "user") continue;
+      const text = m.text || m.message || "";
+      if (text) out.push(String(text));
+    }
+    return out;
+  }
+
+  function historyExercise(state) {
+    const turns = userTurns(state);
+    for (let i = turns.length - 1; i >= 0; i--) {
+      const ex = matchExercise(turns[i]);
+      if (ex && !isFoodText(softText(turns[i]))) return ex;
+    }
+    return null;
+  }
+
+  function isFoodText(text) {
+    return /(\bmat\b|\bmaten\b|kosthold|protein|spise|\bspis\b|kalor|kcal|måltid|før trening|etter trening|pre workout|post workout|gå ned i vekt|ned i vekt|bygge muskl|kosthold)/iu.test(text);
+  }
+
+  function foodKind(text) {
+    if (/etter trening|etter økt|post workout|etterpå/iu.test(text)) return "post";
+    if (/før trening|pre workout|før økt/iu.test(text)) return "pre";
+    if (/gå ned|ned i vekt|slanke/iu.test(text)) return "cut";
+    if (/bygge muskl|muskelvekst/iu.test(text)) return "bulk";
+    return "general";
+  }
+
+  function injuryReply(raw) {
+    const text = String(raw || "");
+    const emergency = /\b(knip i bryst|brystsmerte|svimmel|besvim|pustevansk|hjerte)\b/iu.test(text);
+    const pain = /\b(vondt|smerte|skad|brudd|hevelse|hoven|knip)\b/iu.test(text);
+    const chest = /\bbryst/iu.test(text) && !/\bbrystpress\b/iu.test(text);
+    if (emergency || (pain && chest && /\b(brystet|brystsmerte|knip)\b/iu.test(text))) {
       return "Det høres ut som noe du bør ta alvorlig. Jeg er ikke lege, og jeg skal ikke gjettesykdommer. " +
         "Ta kontakt med lege eller legevakt, og tren ikke før du har fått det avklart.";
     }
-    if (RE.knee.test(text) || RE.back.test(text) || RE.shoulder.test(text) || (RE.injury.test(text) && RE.pain.test(text))) {
+    const knee = /\bkne\b|\bknær|\bkneet|\bknærne/iu.test(text);
+    const back = /\bryggen\b|\bkorsrygg|\blynderygg/iu.test(text);
+    const shoulder = /\bskuldra\b|\bskulderen\b|\bskuldrene\b|\bskulder\b/iu.test(text);
+    if (pain && (knee || back || shoulder)) {
       let part = "kroppen";
-      if (RE.knee.test(text)) part = "knærne";
-      else if (RE.back.test(text)) part = "ryggen";
-      else if (RE.shoulder.test(text)) part = "skulderen";
+      if (knee) part = "knærne";
+      else if (back) part = "ryggen";
+      else part = "skulderen";
       return `Hvis det er skarp smerte i ${part}, er det lurt å stoppe øvelsen og ta det rolig. ` +
         "Jeg er ikke lege, så ved vedvarende eller forverret smerte bør du snakke med fastlege eller fysioterapeut. " +
         "I mellomtiden: kutt dyp bøy og hopp, velg kortere bevegelsesutslag, og hold deg til det som er helt smertefritt. " +
         "Stølhet er greit, skarp vondt er det ikke.";
     }
-    if (RE.how.test(text)) {
-      const ex = findExercise(text);
-      if (ex) {
-        let reply = `${ex.name}: ${ex.desc} Tips: ${ex.tips}`;
-        if (RE.weight.test(text)) {
-          reply += " Når teknikken sitter og du har et par repetisjoner i reserve på siste sett, " +
-            "kan du legge på omtrent 2,5 kg eller ta én repetisjon mer neste økt.";
-        }
-        return reply;
-      }
-      const sess = plan ? todaySession(plan) : null;
-      if (sess && (sess.exercises || []).length) {
-        const ex0 = sess.exercises[0];
-        return `I dag starter du med ${ex0.name}. ${ex0.desc} Tips: ${ex0.tips} ` +
-          "Vil du at jeg forklarer en bestemt øvelse, så skriv navnet på den.";
-      }
-      return "Si navnet på øvelsen, så forklarer jeg den steg for steg. For eksempel «hvordan gjør jeg knebøy?».";
+    if (pain && /\b(vondt|smerte)\b/iu.test(text) && !matchExercise(text)) {
+      return "Skarp eller plutselig smerte er et signal om å stoppe øvelsen, ikke om å tøffe seg gjennom. " +
+        "Jeg er ikke lege. Ved smerte som ikke gir seg, hevelse eller smerte som blir verre, snakk med fastlege eller fysioterapeut. " +
+        "Stølhet er greit, skarp vondt er det ikke.";
     }
-    if (RE.weight.test(text)) {
-      return `${hello}øk bare når du har tatt alle settene med god teknikk, og hatt et par repetasjoner i reserve. ` +
-        "Da kan du legge på ca. 2,5 kg, eller ta én repetisjon mer neste økt. " +
-        "Hvis siste sett var en kamp, eller teknikken raknet, blir du på samme vekt en uke til. " +
-        "Etter ukesjekken justerer jeg planen automatisk opp eller ned.";
+    return "";
+  }
+
+  function splitSentences(s) {
+    const parts = [];
+    let buf = "";
+    for (const ch of String(s || "")) {
+      buf += ch;
+      if (ch === "." || ch === "!" || ch === "?") {
+        const t = buf.trim();
+        if (t) parts.push(t);
+        buf = "";
+      }
     }
-    if (RE.sore.test(text)) {
+    if (buf.trim()) parts.push(buf.trim());
+    return parts;
+  }
+
+  function techniqueReply(ex) {
+    const sentences = splitSentences(ex.desc);
+    const steps = (sentences.length ? sentences : ["Gjør bevegelsen rolig og kontrollert."])
+      .map((s, i) => (i + 1) + ". " + s.replace(/[.!?]+$/, "") + ".")
+      .join(" ");
+    let reply = ex.name + ", steg for steg: " + steps;
+    if (ex.tips) reply += " Tips: " + ex.tips;
+    return reply;
+  }
+
+  function foodReply(profile, plan, kind) {
+    const p = profile || {};
+    const w = Number(p.weight_kg) || 75;
+    const low = Math.round(1.6 * w);
+    const high = Math.round(2.2 * w);
+    const nut = (plan && plan.nutrition && plan.nutrition.kcal) ? plan.nutrition : nutritionTargets(p);
+    const bits = [];
+    if (kind === "post") {
+      bits.push("Etter trening: få i deg protein og litt karbohydrat innen et par timer. Kvarg og banan, eller kylling og ris, er nok. Du trenger ikke en shake hvis vanlig mat er like greit.");
+    } else if (kind === "pre") {
+      bits.push("Før trening: spis et vanlig måltid 2–3 timer før, med karbohydrat og litt protein, for eksempel grove brødskiver og egg eller havregryn. Er det under en time igjen, holder det med en banan.");
+    }
+    bits.push("Sikt på omtrent " + low + "–" + high + " g protein om dagen, altså ca. 1,6–2,2 g per kg kroppsvekt.");
+    if (nut && nut.kcal) bits.push("Et rolig energimål for deg er rundt " + nut.kcal + " kcal.");
+    bits.push("Måltider som funker: frokost kvarg med banan, lunsj grove brødskiver med egg eller kylling, middag laks, fiskekaker eller bønner med potet og brokkoli, kvelds kesam eller knekkebrød.");
+    if (kind === "general") {
+      bits.push("Før trening: et måltid 2–3 timer før, eller en banan hvis det er kort tid. Etter trening: protein og karbohydrat innen et par timer.");
+    }
+    if (kind === "cut" || p.goal === "ga_ned_i_vekt") {
+      bits.push("For å gå ned i vekt: hold et rolig underskudd, nok protein, og grønnsaker som metter. Ikke kutt så hardt at du blir sliten og sulten.");
+    }
+    if (kind === "bulk" || p.goal === "bygge_muskler") {
+      bits.push("For å bygge muskler: spis litt mer enn du forbruker, fordel proteinet på dagens måltider, og løft tungt nok til at de siste repetisjonene er krevende.");
+    }
+    const meals = (plan && plan.meals) || [];
+    if (meals.length) bits.push("Dagens forslag er " + meals.map((m) => String(m.name || "").toLowerCase() + " til " + m.slot).join(", ") + ".");
+    bits.push("Jeg er ikke lege eller klinisk ernæringsfysiolog. Har du sykdom, spiseforstyrrelse eller er usikker, ta det med helsevesenet.");
+    return bits.join(" ");
+  }
+
+  function setsReply(ex) {
+    if (!ex) {
+      return "Et vanlig utgangspunkt er 3 sett med 8–12 repetisjoner. Hvil 60–90 sekunder mellom settene på tunge øvelser, og 45–75 sekunder på mindre øvelser. Si navnet på øvelsen, så kan jeg være mer konkret.";
+    }
+    const rest = ["bein", "bryst", "rygg", "bakside"].includes(ex.muscle) ? "60–90" : "45–75";
+    return ex.name + ": ta 3 sett med 8–12 repetisjoner. Hvil omtrent " + rest + " sekunder mellom settene. Når du klarer alle settene med god teknikk og et par reps i reserve, kan du legge på litt vekt neste økt.";
+  }
+
+  function planReply(profile, plan) {
+    const goal = GOALS[profile.goal || ""] || "målet ditt";
+    const level = LEVELS[profile.level || ""] || "nivået ditt";
+    const eq = EQUIPMENT[profile.equipment || ""] || "utstyret ditt";
+    const sess = plan ? todaySession(plan) : null;
+    const today = sess ? ` I dag er det ${sess.title.toLowerCase()}: ${sess.blurb}` : "";
+    return `Planen er satt opp for å ${goal.toLowerCase()}, tilpasset at du er ${level.toLowerCase()} og trener med ${eq.toLowerCase()}. ` +
+      `Du har ${profile.days_per_week || 3} treningsdager og økter på rundt ${profile.minutes || 30} minutter.` +
+      `${today} Etter hver uke spør jeg hvordan det gikk, og justerer opp, ned eller holder nivået.`;
+  }
+
+  function techniquePhrase(text) {
+    const patterns = [
+      /^hvordan gjør jeg (.+)$/,
+      /^hvordan gjøre (.+)$/,
+      /^hvordan gjør man (.+)$/,
+      /^how do i (.+)$/,
+      /^how to (.+)$/,
+      /^forklar (.+)$/,
+      /^vis meg (.+)$/,
+      /^teknikk (?:på|for) (.+)$/,
+      /^(.+) teknikk$/,
+    ];
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m && m[1]) return m[1];
+    }
+    return "";
+  }
+
+  function fallbackReply(message) {
+    const pool = [
+      "Hvordan gjør jeg knebøy?",
+      "Hva gjør jeg om mat?",
+      "Hvor mange reps bør jeg ta?",
+      "Skal jeg øke vekten?",
+      "Hva spiser jeg etter trening?",
+      "Hvordan varmer jeg opp?",
+    ];
+    let h = 0;
+    const s = softText(message);
+    for (let i = 0; i < s.length; i++) h = (h + s.charCodeAt(i) * (i + 1)) % 997;
+    const picks = [];
+    for (let k = 0; picks.length < 3 && k < pool.length * 2; k++) {
+      const q = pool[(h + k) % pool.length];
+      if (!picks.includes(q)) picks.push(q);
+    }
+    return "Jeg får ikke helt tak i spørsmålet. Du kan for eksempel spørre: «" +
+      picks[0] + "», «" + picks[1] + "» eller «" + picks[2] + "».";
+  }
+
+  function ruleReply(message, state) {
+    const raw = String(message || "").trim();
+    if (!raw) return "Hva lurer du på? Du kan spørre om øvelser, mat, stølhet, eller hvorfor planen ser ut som den gjør.";
+    const text = softText(raw);
+    const profile = (state || {}).profile || {};
+    const plan = (state || {}).plan || {};
+    const name = profile.name || "";
+    const hello = name ? name + ", " : "";
+    const hurt = injuryReply(raw);
+    if (hurt) return hurt;
+    if (/^(hei|heisann|hallo|hello|hey|hi|yo|morn|god morgen|god kveld|god dag)( der| igjen)?$/.test(text)) {
+      return "Hei" + (name ? " " + name : "") + "! Jeg kan hjelpe med teknikk, mat, søvn og hvordan du øker vekten. Prøv «hvordan gjør jeg knebøy?» eller «hva gjør jeg om mat?».";
+    }
+    if (/^(takk|tusen takk|takk skal du ha|thanks|thank you)$/.test(text)) {
+      return (name ? name + ", bare " : "Bare ") + "hyggelig. Spør igjen når du står fast i en øvelse, i maten eller i progresjonen.";
+    }
+    if (isFoodText(text)) return foodReply(profile, plan, foodKind(text));
+    if (/\b(søvn|sove|sovet|trøtt|søvnløs)\b/.test(text)) {
+      return "Sikt på 7–9 timer søvn, gjerne med omtrent samme leggetid. Musklene blir sterkere mens du sover, så en veldig kort natt er et dårlig tidspunkt for en rekordtung økt. Mørkt rom og rolig siste time hjelper mer enn å scrolle. Jeg er ikke lege – ved langvarig søvnvansker, snakk med fastlegen.";
+    }
+    if (/(?:^|\s)(?:støl|stølhet|ømme|øm|doms|sore)(?=\s|$)/.test(text)) {
       return "Stølhet ett til to døgn etter økten er vanlig, særlig i starten. En rolig gåtur og litt lett bevegelse hjelper ofte mer enn å ligge stille. " +
         "Hvis du er så støl at teknikken blir dårlig, tar du en lettere økt eller bytter til aktiv hvile. " +
-        "Skarp smerte, hevelse eller smerte som ikke gir seg, er noe annet – da skal du ikke «trene det bort».";
+        "Skarp smerte, hevelse eller smerte som ikke gir seg, er noe annet – da skal du ikke «trene det bort». Jeg er ikke lege.";
     }
-    if (RE.food.test(text)) {
-      const nut = (plan.nutrition || (profile.goal ? nutritionTargets(profile) : {}));
-      const meals = plan.meals || [];
-      const bits = [];
-      if (nut && nut.kcal) bits.push(`Jeg sikter mot omtrent ${nut.kcal} kcal og ${nut.protein_g} g protein om dagen.`);
-      if (meals.length) bits.push("Dagens forslag er " + meals.map((m) => m.name.toLowerCase() + " til " + m.slot).join(", ") + ".");
-      bits.push("Hold det enkelt: protein i hvert måltid (kvarg, egg, kylling, fisk, bønner), mye grønnsaker, og helt vanlig norsk hverdagsmat. Du trenger ikke kosttilskudd for å komme i gang.");
-      if (profile.goal === "ga_ned_i_vekt") bits.push("Underskuddet er bevisst rolig, så du skal ikke gå sulten og sliten.");
-      return bits.join(" ");
+    if (/\b(oppvarming|varm opp|warmup|warm up)\b/.test(text)) {
+      return "Bruk 5–8 minutter på å bli varm: rask gange, sykkel eller lett jogg. Ta deretter 1–2 lette sett av den første øvelsen, med god teknikk, før du går på arbeidsvekta. Du trenger ikke å tøye hardt når du er kald.";
     }
-    if (RE.skip.test(text)) {
-      return `${hello}én tapt økt er ikke et problem. Ta neste planlagte økt som vanlig, eller gå en tur i dag hvis kroppen er sliten. ` +
-        "Ikke prøv å «ta igjen» to økter på en dag. Når du tar ukesjekken, justerer jeg planen etter hvor mange økter som faktisk ble gjort.";
-    }
-    if (RE.rest.test(text)) {
-      return "Hvile er en del av treningsplanen, ikke et avbrekk fra den. Musklene blir sterkere mellom øktene, særlig når du sover nok. " +
-        "På hviledager er en rolig gåtur gull. Prøv å få 7–9 timer søvn – det gjør mer for fremgangen enn et ekstra sett.";
-    }
-    if (RE.motiv.test(text)) {
+    if (/\b(orke|motivas|gidder|lei|tung dag|gi opp|umotivert)\b/.test(text)) {
       return `${hello}du trenger ikke å ha lyst. Du trenger bare å starte de første fem minuttene. ` +
         "Sett på skoene, gjør oppvarmingen, og tillat deg å ta en kort økt hvis det er en sånn dag. " +
         "Streaken din bygges av økter som ble gjort, ikke av perfekte økter.";
     }
-    if (RE.plan.test(text) || RE.why.test(text)) {
-      const goal = GOALS[profile.goal || ""] || "målet ditt";
-      const level = LEVELS[profile.level || ""] || "nivået ditt";
-      const eq = EQUIPMENT[profile.equipment || ""] || "utstyret ditt";
-      const sess = plan ? todaySession(plan) : null;
-      const today = sess ? ` I dag er det ${sess.title.toLowerCase()}: ${sess.blurb}` : "";
-      return `Planen er satt opp for å ${goal.toLowerCase()}, tilpasset at du er ${level.toLowerCase()} og trener med ${eq.toLowerCase()}. ` +
-        `Du har ${profile.days_per_week || 3} treningsdager og økter på rundt ${profile.minutes || 30} minutter.` +
-        `${today} Etter hver uke spør jeg hvordan det gikk, og justerer opp, ned eller holder nivået.`;
+    if (/øke vekt|legge på|tyngre|for lett|for tung|progresjon|progressive/.test(text)) {
+      return `${hello}øk bare når du har tatt alle settene med god teknikk, og hatt et par repetisjoner i reserve. ` +
+        "Da kan du legge på ca. 2,5 kg, eller ta én repetisjon mer neste økt. " +
+        "Hvis siste sett var en kamp, eller teknikken raknet, blir du på samme vekt en uke til.";
     }
-    const sess = plan ? todaySession(plan) : null;
-    if (sess) {
-      return `Jeg henger med. I dag står ${sess.title.toLowerCase()} på planen. ` +
-        "Spør meg gjerne «hvordan gjør jeg …», om mat, stølhet, eller om du skal øke vekten. " +
-        "Husk at jeg ikke er lege – ved skade tar du det med helsevesenet.";
+    if (/hvile mellom|pause mellom|rest mellom|hvor lenge (?:skal jeg )?hvile/.test(text)) {
+      const ex = matchExercise(raw) || historyExercise(state);
+      if (ex) return setsReply(ex);
+      return "Hvil 60–90 sekunder mellom sett på tunge øvelser som knebøy, benkpress og markløft, og 45–75 sekunder på mindre øvelser som sidehev og curls. Du skal kunne starte neste sett med god teknikk, ikke stå og hive etter pusten.";
     }
-    return "Spør meg om øvelser, mat, stølhet, hvile eller hvordan du øker vekten. Jeg forklarer gjerne planen din også. Dette er ikke medisinsk rådgivning.";
+    if (/\b(hvor mange reps|hvor mange sett|antall reps|antall sett|sett og reps|reps og sett)\b/.test(text)) {
+      return setsReply(matchExercise(raw) || historyExercise(state));
+    }
+    if (/\b(hoppe over|hoppa over|ikke trent|missa|missed|skip)\b/.test(text)) {
+      return `${hello}én tapt økt er ikke et problem. Ta neste planlagte økt som vanlig, eller gå en tur i dag hvis kroppen er sliten. ` +
+        "Ikke prøv å «ta igjen» to økter på en dag. Når du tar ukesjekken, justerer jeg planen etter hvor mange økter som faktisk ble gjort.";
+    }
+    if (/\bplan(en)?\b|ukesplan|hva er økten|hvorfor denne|hvorfor akkurat|forklar planen/.test(text)) {
+      return planReply(profile, plan);
+    }
+    if (/\bhviledag\b|\bhvile\b/.test(text)) {
+      return "Hvile er en del av treningsplanen, ikke et avbrekk fra den. Musklene blir sterkere mellom øktene, særlig når du sover nok. " +
+        "På hviledager er en rolig gåtur gull. Prøv å få 7–9 timer søvn – det gjør mer for fremgangen enn et ekstra sett.";
+    }
+    const phrase = techniquePhrase(text);
+    const tokens = text.split(" ").filter(Boolean);
+    const fromPhrase = phrase ? matchExercise(phrase) : null;
+    const fromAll = matchExercise(raw);
+    const ex = fromPhrase || fromAll;
+    if (ex && (phrase || tokens.length <= 6)) return techniqueReply(ex);
+    if (/^(og |men )?(teknikk|hvordan|forklar det)$/.test(text)) {
+      const prev = historyExercise(state);
+      if (prev) return techniqueReply(prev);
+    }
+    if (/^(og|men|også|mer|utdyp|fortell mer|samme)\b/.test(text)) {
+      const prev = historyExercise(state);
+      if (prev && /reps|sett|vekt|teknikk/.test(text)) return setsReply(prev);
+      const turns = userTurns(state);
+      for (let i = turns.length - 1; i >= 0; i--) {
+        if (isFoodText(softText(turns[i]))) return foodReply(profile, plan, foodKind(text + " " + turns[i]));
+      }
+      if (prev) return techniqueReply(prev);
+    }
+    return fallbackReply(raw);
   }
 
   function coachBackend() { return "regler"; }

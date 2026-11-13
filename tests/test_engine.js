@@ -299,6 +299,76 @@ test("regeltreneren forklarer og er trygg", () => {
   assert(!r.reply.includes("API_KEY"));
 });
 
+test("treneren skjønner mat, benkpress og hei", () => {
+  const state = { profile: profile({ name: "Inifi", weight_kg: 80, goal: "bygge_muskler" }), plan: { days: [] }, chat: [] };
+  const mat = T.ruleReply("Hva gjør jeg om mat", state);
+  assert(!/si navnet på øvelsen/i.test(mat));
+  assert(!/jeg henger med/i.test(mat));
+  assert(/protein/i.test(mat));
+  assert(/1,6/.test(mat));
+  assert(/2,2/.test(mat));
+  assert(/kvarg|kylling|egg/i.test(mat));
+  assert(/etter trening/i.test(mat));
+  assert(/lege/i.test(mat));
+
+  const benk = T.ruleReply("Benk press", state);
+  assert(/benkpress/i.test(benk));
+  assert(/bryst/i.test(benk));
+  assert(/\b1\./.test(benk));
+  assert(!/jeg henger med/i.test(benk));
+  assert(!/si navnet på øvelsen/i.test(benk));
+
+  const hey = T.ruleReply("Hey", state);
+  assert(/hei/i.test(hey));
+  assert(!/si navnet på øvelsen/i.test(hey));
+  assert(!/jeg henger med/i.test(hey));
+});
+
+test("treneren tåler skrivefeil, engelsk og oppfølging", () => {
+  const base = { profile: profile({ weight_kg: 70, goal: "bli_sterkere" }), plan: { days: [] }, chat: [] };
+  assert(/benkpress/i.test(T.ruleReply("benkpres", base)));
+  assert(/stangen|markløft/i.test(T.ruleReply("deadlift", base)));
+  assert(/skulderbredde|hofta/i.test(T.ruleReply("squat", base)));
+  assert(/armhev|brystet|planke/i.test(T.ruleReply("push-ups", base)));
+  assert(/haken|stang/i.test(T.ruleReply("chins", base)));
+  assert(/skulderpress/i.test(T.ruleReply("skulderpress", base)));
+  assert(/2,5 kg/.test(T.ruleReply("øke vekten", base)));
+  assert(/støl/i.test(T.ruleReply("jeg er øm", base)));
+  assert(/markløft|stangen/i.test(T.ruleReply("mark løft", base)));
+
+  const afterFood = {
+    profile: base.profile,
+    plan: { days: [] },
+    chat: [
+      { role: "user", text: "Hva gjør jeg om mat" },
+      { role: "coach", text: "protein" },
+    ],
+  };
+  const post = T.ruleReply("og etter trening?", afterFood);
+  assert(/etter trening/i.test(post));
+  assert(/protein/i.test(post));
+  assert(!/si navnet på øvelsen/i.test(post));
+
+  const afterBench = {
+    profile: base.profile,
+    plan: { days: [] },
+    chat: [
+      { role: "user", text: "Benk press" },
+      { role: "coach", text: "steg" },
+    ],
+  };
+  const reps = T.ruleReply("hvor mange reps?", afterBench);
+  assert(/8/.test(reps));
+  assert(/benk/i.test(reps));
+  assert(/sett/i.test(reps));
+
+  const unknown = T.ruleReply("asdfgh qwerty zzzzz", base);
+  assert(!/jeg henger med/i.test(unknown));
+  assert(!/si navnet på øvelsen/i.test(unknown));
+  const examples = unknown.match(/«[^»]+»/g) || [];
+  assert.strictEqual(examples.length, 3);
+});
+
 test("bump_reps holder seg i området", () => {
   assert.strictEqual(T.midReps("8–12"), 10);
   assert.strictEqual(T.bumpReps("8–12", 1), "9–13");
