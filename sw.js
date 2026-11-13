@@ -1,5 +1,5 @@
 /* Versjonert cache for frakoblet bruk under ./ (GitHub Pages https://hellotheere.github.io/Trening/). */
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE = "trener-static-" + VERSION;
 const ASSETS = [
   "./",
@@ -20,6 +20,10 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).then(() => self.skipWaiting())
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

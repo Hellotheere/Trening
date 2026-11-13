@@ -976,6 +976,50 @@
       picks[0] + "», «" + picks[1] + "» eller «" + picks[2] + "».";
   }
 
+  function programAwareReply(raw, text, state, plan) {
+    if (/trene i dag|dagens økt|hva skal jeg trene|skal jeg trene i dag/.test(text)) {
+      const sess = todaySession(plan);
+      if (!sess) return "Jeg finner ikke en plan for i dag ennå.";
+      if (!isTrainingDay(sess)) {
+        const next = nextTrainingDay(plan, sess.date);
+        return "I dag er en hviledag. Gå en rolig tur, sov 7–9 timer, og spis nok protein. " +
+          (next ? "Neste økt: " + next.weekday + " – " + next.title + "." : "");
+      }
+      const names = (sess.exercises || []).slice(0, 6).map((e) => e.name).filter(Boolean);
+      return "I dag er det " + (sess.title || "trening") + ". " +
+        (names.length ? "Øvelsene er " + names.join(", ") + ". " : "") +
+        "Trykk Start økt når du er klar.";
+    }
+    if (/hvordan går det|går det med|fremgang med/.test(text)) {
+      const tokens = foldText(raw).split(" ").filter(Boolean);
+      let best = null;
+      for (let i = 0; i < tokens.length; i++) {
+        const chunk = tokens.slice(i, i + 3).join("");
+        const stemmed = chunk.replace(/(ene|en|et|a)$/, "");
+        best = considerExercise(best, chunk, i, false);
+        if (stemmed !== chunk) best = considerExercise(best, stemmed, i, false);
+      }
+      const ex = best && best.entry;
+      const logs = (state && state.workouts) || [];
+      if (!ex) {
+        const done = logs.filter((w) => w.completed).length;
+        return "Du har " + done + " fullførte økter i loggen. Spør for eksempel «hvordan går det med benken», så ser jeg på vekta di.";
+      }
+      let last = null;
+      for (const w of logs) {
+        for (const e of w.exercises || []) {
+          if (e.id !== ex.id) continue;
+          const sets = (e.sets || []).filter((s) => s.done && Number(s.weight_kg) > 0);
+          if (sets.length) last = { date: w.date, kg: sets[sets.length - 1].weight_kg, reps: sets[sets.length - 1].reps };
+        }
+      }
+      if (!last) return "Jeg har ikke en logg på " + ex.name + " ennå. Ta den neste gang, så følger jeg med.";
+      const kg = String(last.kg).replace(".", ",");
+      return ex.name + ": sist " + kg + " kg" + (last.reps ? " × " + last.reps : "") + " den " + last.date + ". Når de siste settene er lette, legger du på ca. 2,5 kg.";
+    }
+    return "";
+  }
+
   function ruleReply(message, state) {
     const raw = String(message || "").trim();
     if (!raw) return "Hva lurer du på? Du kan spørre om øvelser, mat, stølhet, eller hvorfor planen ser ut som den gjør.";
@@ -991,6 +1035,10 @@
     }
     if (/^(takk|tusen takk|takk skal du ha|thanks|thank you)$/.test(text)) {
       return (name ? name + ", bare " : "Bare ") + "hyggelig. Spør igjen når du står fast i en øvelse, i maten eller i progresjonen.";
+    }
+    if (!isFoodText(text)) {
+      const program = programAwareReply(raw, text, state, plan);
+      if (program) return program;
     }
     if (isFoodText(text)) return foodReply(profile, plan, foodKind(text));
     if (/\b(søvn|sove|sovet|trøtt|søvnløs)\b/.test(text)) {

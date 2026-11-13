@@ -61,6 +61,7 @@ def main():
             page.click("text=Neste")
             page.click("text=Lag planen min")
             page.wait_for_selector(".switch")
+            page.wait_for_selector("text=I dag")
             page.click("text=Min egen plan")
             page.wait_for_selector("text=Rediger uken")
             page.click(".week button:has-text('man')")

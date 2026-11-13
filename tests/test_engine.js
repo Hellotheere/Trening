@@ -369,6 +369,26 @@ test("treneren tåler skrivefeil, engelsk og oppfølging", () => {
   assert.strictEqual(examples.length, 3);
 });
 
+test("treneren kjenner dagens økt og benk-loggen", () => {
+  const p = profile({ name: "Inifi" });
+  const plan = T.materializeCustomPlan(T.defaultCustomPlan(), { start: "2026-11-13", profile: p });
+  const state = {
+    profile: p, plan, chat: [],
+    workouts: [{
+      date: "2026-11-09", completed: true,
+      exercises: [{ id: "benk", name: "Benkpress", sets: [{ reps: 8, weight_kg: 60, done: true }] }],
+    }],
+  };
+  const today = T.ruleReply("Hva skal jeg trene i dag?", state);
+  assert(/hviledag/i.test(today));
+  assert(/mandag/i.test(today));
+  const bench = T.ruleReply("Hvordan går det med benken?", state);
+  assert(/60/.test(bench));
+  assert(/benk/i.test(bench));
+  const food = T.ruleReply("Hva skal jeg spise for mer protein?", state);
+  assert(/protein/i.test(food));
+});
+
 test("ukedag følger kalenderen, mandag først, også søndag", () => {
   const cases = [
     ["2026-11-09", "mandag", 1],
