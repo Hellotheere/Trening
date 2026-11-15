@@ -89,7 +89,22 @@
     return `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name] || ""}</svg>`;
   }
 
-  function tap(ms) { try { if (navigator.vibrate) navigator.vibrate(ms || 12); } catch {} }
+  function tap(ms) {
+    try {
+      if (navigator.vibrate) navigator.vibrate(ms || 12);
+      else document.documentElement.classList.add("tap");
+    } catch {}
+  }
+  let wakeLock = null;
+  async function holdWake() {
+    try {
+      if (navigator.wakeLock && !wakeLock) wakeLock = await navigator.wakeLock.request("screen");
+    } catch {}
+  }
+  function dropWake() {
+    try { if (wakeLock) wakeLock.release(); } catch {}
+    wakeLock = null;
+  }
   function todayIso() {
     return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Oslo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   }
@@ -267,7 +282,8 @@
     state.editing = false; state.picker = false; state.swap = false;
     if (id === "okt" && !state.workout) state.workoutSess = null;
     state.tab = id; state.view = "app";
-    if (id === "okt") openWorkout(false);
+    if (id === "okt") { openWorkout(false); holdWake(); }
+    else dropWake();
     render();
   }
 
@@ -742,13 +758,12 @@
         el("option", { value: "" }, "RPE"),
       );
       for (let n = 6; n <= 10; n++) rpe.append(el("option", { value: String(n), selected: String(s.rpe || "") === String(n) }, String(n)));
-      row.append(rpe);
       row.append(el("button", { class: "tick" + (s.done ? " on" : ""), type: "button", "aria-label": "Sett ferdig", onclick: () => {
         s.done = !s.done; tap(14);
         if (s.done && ex.rest_sec) startRest(ex.rest_sec);
         else render();
         saveWorkout(false);
-      } }, s.done ? "✓" : "○"));
+      } }, s.done ? "✓" : "○"), rpe);
       sets.append(row);
     });
     wrap.append(el("h2", {}, "Sett"), sets);
@@ -1195,6 +1210,16 @@
   document.addEventListener("click", (e) => {
     const t = e.target.closest && e.target.closest("button");
     if (t) tap(8);
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!state.rest) return;
+    state.rest.left = restLeft();
+    if (state.rest.left <= 0 && state.rest.t) {
+      clearInterval(state.rest.t);
+      state.rest.left = 0;
+    }
+    if (state.tab === "okt" && !document.hidden) holdWake();
+    render();
   });
   watchUpdates();
   boot();

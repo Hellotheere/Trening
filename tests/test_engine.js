@@ -389,6 +389,18 @@ test("treneren kjenner dagens økt og benk-loggen", () => {
   assert(/protein/i.test(food));
 });
 
+test("dialekt og skrivefeil forstås", () => {
+  const p = profile({ name: "Inifi", equipment: "treningssenter" });
+  const plan = T.generatePlan(p, { start: "2026-11-15" });
+  const state = { profile: p, plan, workouts: [], chat: [] };
+  const trene = T.coachReply("ka ska æ trene", state);
+  assert(/hvile|økt|i dag/i.test(trene.reply));
+  const sor = T.coachReply("e det greit å trene sår", state);
+  assert(/støl/i.test(sor.reply));
+  assert(/greit/i.test(sor.reply));
+  assert(sor.reply.length < 220);
+});
+
 test("programmer, tips og planendring", () => {
   const p = profile({ equipment: "treningssenter", level: "viderekommen", days_per_week: 4, minutes: 45 });
   assert.strictEqual(T.programCatalog().length, 5);

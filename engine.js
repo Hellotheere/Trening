@@ -707,8 +707,32 @@
 
   let exerciseCatalog = null;
 
+  function dialectToBokmal(s) {
+    let t = " " + String(s || "") + " ";
+    const pairs = [
+      ["korleis", "hvordan"],
+      ["ikkje", "ikke"],
+      ["greitt", "greit"],
+      ["saar", "støl"],
+      ["sår", "støl"],
+      ["ska", "skal"],
+      ["ka", "hva"],
+      ["æ", "jeg"],
+      ["eg", "jeg"],
+      ["mæ", "meg"],
+      ["kor", "hvor"],
+      ["ke", "ikke"],
+      ["e", "er"],
+    ];
+    for (const [from, to] of pairs) {
+      const re = new RegExp("(^|\\s)" + from + "(?=\\s|$)", "gi");
+      t = t.replace(re, "$1" + to);
+    }
+    return t.trim();
+  }
+
   function softText(s) {
-    return String(s || "")
+    return dialectToBokmal(s)
       .toLowerCase()
       .replace(/[^a-z0-9æøå\s]+/gi, " ")
       .replace(/\s+/g, " ")
@@ -1055,10 +1079,8 @@
     if (/\b(søvn|sove|sovet|trøtt|søvnløs)\b/.test(text)) {
       return "Sikt på 7–9 timer søvn, gjerne med omtrent samme leggetid. Musklene blir sterkere mens du sover, så en veldig kort natt er et dårlig tidspunkt for en rekordtung økt. Mørkt rom og rolig siste time hjelper mer enn å scrolle. Jeg er ikke lege – ved langvarig søvnvansker, snakk med fastlegen.";
     }
-    if (/(?:^|\s)(?:støl|stølhet|ømme|øm|doms|sore)(?=\s|$)/.test(text)) {
-      return "Stølhet ett til to døgn etter økten er vanlig, særlig i starten. En rolig gåtur og litt lett bevegelse hjelper ofte mer enn å ligge stille. " +
-        "Hvis du er så støl at teknikken blir dårlig, tar du en lettere økt eller bytter til aktiv hvile. " +
-        "Skarp smerte, hevelse eller smerte som ikke gir seg, er noe annet – da skal du ikke «trene det bort». Jeg er ikke lege.";
+    if (/(?:^|\s)(?:støl|stølhet|ømme|øm|doms|sore)(?=\s|$)/.test(text) || /greit å trene/.test(text)) {
+      return "Ja, det er greit å trene når du er støl. Ta det roligere. Skarp smerte er noe annet – da stopper du. Jeg er ikke lege.";
     }
     if (/\b(oppvarming|varm opp|warmup|warm up)\b/.test(text)) {
       return "Bruk 5–8 minutter på å bli varm: rask gange, sykkel eller lett jogg. Ta deretter 1–2 lette sett av den første øvelsen, med god teknikk, før du går på arbeidsvekta. Du trenger ikke å tøye hardt når du er kald.";
