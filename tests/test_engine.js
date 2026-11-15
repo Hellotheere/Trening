@@ -389,6 +389,26 @@ test("treneren kjenner dagens økt og benk-loggen", () => {
   assert(/protein/i.test(food));
 });
 
+test("programmer, tips og planendring", () => {
+  const p = profile({ equipment: "treningssenter", level: "viderekommen", days_per_week: 4, minutes: 45 });
+  assert.strictEqual(T.programCatalog().length, 5);
+  const built = T.buildProgram(p, "fullkropp3", { week: 4, start: MONDAY });
+  assert.strictEqual(built.plan.phase, "deload");
+  assert(built.plan.notes.join(" ").toLowerCase().includes("deload"));
+  const state = { profile: p, plan: T.generatePlan(p, { start: "2026-11-13" }), workouts: [], chat: [] };
+  const tip = T.dailyTip(state);
+  assert(tip.length > 10);
+  const short = T.coachReply("gjør økta kortere", state);
+  assert(short.adjust && short.adjust.type === "shorten");
+  assert(/tre første|kort/i.test(short.reply));
+  const swap = T.coachReply("bytt ut knebøy", state);
+  assert.strictEqual(swap.adjust.from, "kneboy_kv");
+  assert(/lege/i.test(swap.reply));
+  const shoulder = T.coachReply("jeg har vondt i skulderen", state);
+  assert.strictEqual(shoulder.adjust.type, "avoid_shoulder");
+  assert(/lege/i.test(shoulder.reply));
+});
+
 test("progresjon skiller overkropp, bein og deload", () => {
   const upper = { id: "benk", name: "Benkpress", reps: "8–12", muscle: "bryst" };
   const lower = { id: "kneboy_kv", name: "Knebøy", reps: "8–12", muscle: "bein" };

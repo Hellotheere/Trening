@@ -298,6 +298,7 @@
     const state = requireState();
     const ctx = { ...state, plan: T.resolvePlan(state) };
     const result = T.coachReply(msg, ctx);
+    if (result.adjust) applyAdjust(state, result.adjust);
     const now = T.todayOslo();
     const log = [...(state.chat || [])];
     log.push({ role: "user", text: msg, date: now });
@@ -350,6 +351,41 @@
     return publicView(parsed);
   }
 
+  function applyAdjust(state, adjust) {
+    const custom = (state.plan_source || "generated") === "custom";
+    const plan = custom ? state.custom_plan : state.plan;
+    if (!plan || !(plan.days || []).length) return;
+    const todayName = T.weekdayName(T.todayOslo());
+    if (adjust.type === "shorten") {
+      const day = plan.days.find((d) => d.weekday === todayName) || plan.days.find((d) => (d.exercises || []).length);
+      if (day) day.exercises = (day.exercises || []).slice(0, adjust.keep || 3);
+    } else if (adjust.type === "swap" && T.EXERCISES[adjust.to]) {
+      const repl = T.EXERCISES[adjust.to];
+      for (const day of plan.days) {
+        day.exercises = (day.exercises || []).map((ex) => ex.id === adjust.from
+          ? Object.assign({}, ex, { id: adjust.to, name: repl.name, muscle: repl.muscle, desc: repl.desc, tips: repl.tips })
+          : ex);
+      }
+    } else if (adjust.type === "avoid_shoulder") {
+      const drop = new Set(["skulderpress", "pike", "lateral", "front_raise", "benk"]);
+      for (const day of plan.days) {
+        day.exercises = (day.exercises || []).filter((ex) => ex.muscle !== "skulder" && !drop.has(ex.id));
+      }
+    }
+    if (custom) state.custom_plan = T.normalizeCustomPlan(state.custom_plan);
+  }
+
+  function chooseProgram(body) {
+    const state = requireState();
+    const built = T.buildProgram(state.profile, body && body.id, { week: (state.plan || {}).week || 1, logs: state.workouts });
+    state.profile = built.profile;
+    state.plan = built.plan;
+    state.plan_source = "generated";
+    state.program_id = built.plan.program_id;
+    save(state);
+    return publicView(state);
+  }
+
   function savePrefs(body) {
     const state = requireState();
     state.prefs = Object.assign({ units: "kg", rest_sec: 90, theme: "system" }, state.prefs || {}, body || {});
@@ -394,7 +430,7 @@
   }
 
   const api = {
-    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay,
+    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay, chooseProgram,
     exportJSON, importJSON, reset, publicView, formatError, TrenerError,
   };
   if (typeof globalThis !== "undefined") globalThis.TrenerStore = api;

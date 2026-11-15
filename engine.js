@@ -1161,7 +1161,96 @@
 
   function coachBackend() { return "regler"; }
 
+  const PROGRAMS = [
+    { id: "fullkropp3", name: "Fullkropp 3 dager", days: 3, minutes: 45, level: "litt_erfaring", blurb: "Tre økter som treffer hele kroppen. Hver fjerde uke er lettere." },
+    { id: "ou4", name: "Overkropp/underkropp 4 dager", days: 4, minutes: 50, level: "viderekommen", blurb: "To og to. Overkropp og bein bytter på." },
+    { id: "ppl", name: "Push/Pull/Bein", days: 6, minutes: 50, level: "viderekommen", blurb: "Press, trekk og bein. Søndag er fri." },
+    { id: "hjem", name: "Hjemmetrening uten utstyr", days: 3, minutes: 30, equipment: "ingen", level: "litt_erfaring", blurb: "Kroppsvekt og gåturer, uten stang." },
+    { id: "nybegynner", name: "Nybegynner", days: 3, minutes: 30, equipment: "ingen", level: "nybegynner", blurb: "Korte økter. Teknikk før vekt." },
+  ];
+
+  function programCatalog() {
+    return PROGRAMS.map((p) => ({ id: p.id, name: p.name, days: p.days, blurb: p.blurb }));
+  }
+
+  function buildProgram(profile, programId, opts) {
+    opts = opts || {};
+    const spec = PROGRAMS.find((p) => p.id === programId) || PROGRAMS[0];
+    const base = normalizeProfile(Object.assign({}, profile || {}, {
+      days_per_week: spec.days,
+      minutes: spec.minutes,
+      level: spec.level,
+      equipment: spec.equipment || (profile && profile.equipment) || "treningssenter",
+    }));
+    const week = Math.max(1, Number(opts.week) || 1);
+    const deload = week % 4 === 0;
+    const plan = generatePlan(base, {
+      week, start: opts.start, logs: opts.logs,
+      mode: deload ? "deload" : (week % 4 === 3 ? "overload" : "start"),
+      intensity: deload ? 0.85 : 1,
+    });
+    plan.program_id = spec.id;
+    plan.program_name = spec.name;
+    plan.phase = deload ? "deload" : "build";
+    plan.notes = (plan.notes || []).concat([deload
+      ? "Uke " + week + " er en deload-uke. Samme øvelser, mindre belastning, så du blir sterkere etterpå."
+      : "Uke " + week + ". Hver fjerde uke letter vi med vilje."]);
+    return { profile: base, plan };
+  }
+
+  function dailyTip(state) {
+    const plan = (state && state.plan) || {};
+    const sess = todaySession(plan);
+    const who = (state && state.profile && state.profile.name) ? state.profile.name + ": " : "";
+    if (!sess || !isTrainingDay(sess)) {
+      return who + "I dag er hvile med vilje. En rolig tur og nok søvn gjør mer enn en ekstra økt.";
+    }
+    const first = (sess.exercises || [])[0];
+    const why = first ? " Start med " + first.name + ", fordi den tåler mest når du fortsatt er uthvilt." : "";
+    return who + "I dag er " + (sess.title || "trening") + "." + why;
+  }
+
+  function exerciseHistory(logs, id) {
+    const rows = [];
+    for (const w of logs || []) {
+      for (const ex of w.exercises || []) {
+        if (ex.id !== id) continue;
+        const sets = (ex.sets || []).filter((s) => s.done);
+        if (!sets.length) continue;
+        const best = sets.reduce((m, s) => Math.max(m, Number(s.weight_kg) || 0), 0);
+        const reps = sets.map((s) => s.reps).filter((r) => r != null);
+        rows.push({ date: w.date, best, reps, volume: sets.reduce((sum, s) => sum + (Number(s.reps) || 0) * (Number(s.weight_kg) || 0), 0) });
+      }
+    }
+    return rows;
+  }
+
+  function interpretAdjust(text) {
+    if (/vondt|smerte/.test(text) && /skulder/.test(text)) {
+      return {
+        reply: "Jeg tar ut tunge press over hodet og lar skulderen få roligere arbeid, som face pull. Grunnen er at en irritert skulder tåler dårlig å presses. Er smerten skarp, hoven eller stråler ned i armen, skal du ikke trene den – kontakt lege eller fysioterapeut.",
+        adjust: { type: "avoid_shoulder" },
+      };
+    }
+    if (/kortere|gjør økta kortere|kort ned økta|mindre tid/.test(text)) {
+      return {
+        reply: "Jeg kutter dagens økt til de tre første øvelsene. Grunnen er at en kort økt som blir gjort, slår en lang økt du utsetter.",
+        adjust: { type: "shorten", keep: 3 },
+      };
+    }
+    if (/bytt ut knebøy|bytte knebøy|ikke knebøy|dropp knebøy/.test(text)) {
+      return {
+        reply: "Jeg bytter knebøy med goblet-knebøy. Den trener de samme musklene, men er lettere å styre i knær og rygg. Gjør det skarpt vondt, stopp og snakk med lege.",
+        adjust: { type: "swap", from: "kneboy_kv", to: "goblet" },
+      };
+    }
+    return null;
+  }
+
   function coachReply(message, state) {
+    const text = softText(message);
+    const adj = interpretAdjust(text);
+    if (adj) return { reply: adj.reply, source: "regler", adjust: adj.adjust };
     return { reply: ruleReply(message, state || {}), source: "regler" };
   }
 
@@ -1647,7 +1736,7 @@
     TrenerError, todayOslo, mondayOf, weekdayName, addDays, midReps, bumpReps, weekVolume,
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
     todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
-    platesFor, achievements, weeklySummary,
+    platesFor, achievements, weeklySummary, programCatalog, buildProgram, dailyTip, exerciseHistory, interpretAdjust,
     library, mondayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,
