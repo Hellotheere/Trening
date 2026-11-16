@@ -60,12 +60,15 @@ def main():
             page.fill('input[placeholder="F.eks. Inifi"]', "Inifi")
             page.click("text=Neste")
             page.click("text=Lag planen min")
-            page.wait_for_selector(".switch")
             page.wait_for_selector("text=I dag")
+            page.click("button[aria-label=Innstillinger]")
+            page.wait_for_selector(".switch")
             page.click("text=Min egen plan")
             page.wait_for_selector("text=Rediger uken")
+            page.click("text=Lukk")
             page.click(".week button:has-text('man')")
             page.wait_for_selector("text=Brystdag")
+            page.click("text=Vis øvelser")
             page.wait_for_selector("text=Brystpress i maskin")
             time.sleep(0.35)
             page.screenshot(path=str(OUT / "own-plan-monday.png"), full_page=False)
@@ -114,12 +117,12 @@ def main():
             assert persisted["done"] is True, persisted
 
             # UI etter reload: åpne mandagsøkten igjen og sjekk at settet er huket av
+            page.click("button[aria-label=Innstillinger]")
             page.wait_for_selector(".switch")
-            if page.locator("text=Min egen plan").count():
-                # kan allerede være valgt
-                on = page.locator(".switch button.on")
-                if "Min egen plan" not in (on.inner_text() if on.count() else ""):
-                    page.click("text=Min egen plan")
+            on = page.locator(".switch button.on")
+            if "Min egen plan" not in (on.inner_text() if on.count() else ""):
+                page.click("text=Min egen plan")
+            page.click("text=Lukk")
             page.click(".week button:has-text('man')")
             page.locator("button", has_text=re.compile(r"Start")).first.click()
             page.wait_for_selector(".sets")

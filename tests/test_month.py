@@ -49,6 +49,7 @@ def main():
             page = context.new_page()
             page.base = base
             onboard(page)
+            page.click("text=Mer")
             page.click("text=Programmer")
             page.click("text=Fullkropp 3 dager")
             page.wait_for_selector("text=I dag")
