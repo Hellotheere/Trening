@@ -83,18 +83,21 @@
     svg.setAttribute("aria-label", side === "back" ? "Muskler bakfra" : "Muskler forfra");
     const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
     defs.innerHTML = `
-      <radialGradient id="${uid}-today" cx="35%" cy="28%" r="75%">
-        <stop offset="0" stop-color="#f2ff9a"/><stop offset="1" stop-color="#c6df22"/>
+      <radialGradient id="${uid}-today" cx="38%" cy="30%" r="72%">
+        <stop offset="0" stop-color="#f4ffb0"/><stop offset="1" stop-color="#c6e030"/>
       </radialGradient>
-      <radialGradient id="${uid}-assist" cx="35%" cy="28%" r="75%">
-        <stop offset="0" stop-color="#f7ffd0"/><stop offset="1" stop-color="#d5e98a"/>
+      <radialGradient id="${uid}-assist" cx="38%" cy="30%" r="72%">
+        <stop offset="0" stop-color="#f3f8c8"/><stop offset="1" stop-color="#c9dc78"/>
       </radialGradient>
-      <radialGradient id="${uid}-recovering" cx="35%" cy="28%" r="75%">
-        <stop offset="0" stop-color="#ffd0a4"/><stop offset="1" stop-color="#f0842c"/>
+      <radialGradient id="${uid}-recovering" cx="38%" cy="30%" r="72%">
+        <stop offset="0" stop-color="#ffd2ae"/><stop offset="1" stop-color="#e88848"/>
       </radialGradient>
-      <radialGradient id="${uid}-fresh" cx="35%" cy="28%" r="78%">
-        <stop offset="0" stop-color="#8b939c"/><stop offset="1" stop-color="#5c656e"/>
-      </radialGradient>`;
+      <radialGradient id="${uid}-fresh" cx="38%" cy="30%" r="75%">
+        <stop offset="0" stop-color="#7a828a"/><stop offset="1" stop-color="#4c545c"/>
+      </radialGradient>
+      <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
+        <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#d6ff4a" flood-opacity=".45"/>
+      </filter>`;
     svg.appendChild(defs);
     const gid = (role) => "url(#" + uid + "-" + role + ")";
     const fill = {
@@ -102,7 +105,7 @@
       assist: gid("assist"),
       recovering: gid("recovering"),
       fresh: gid("fresh"),
-      base: "#2c3138",
+      base: "#262a30",
     };
     for (const group of rows) {
       const info = roleFor(group.muscle, paint);
@@ -110,9 +113,10 @@
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         poly.setAttribute("points", points);
         poly.setAttribute("fill", fill[info.role] || fill.fresh);
-        poly.setAttribute("stroke", info.role === "base" ? "#24282e" : "rgba(12,14,16,.55)");
-        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "6");
+        poly.setAttribute("stroke", info.role === "base" ? "#1e2226" : "rgba(8,10,12,.35)");
+        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "3");
         poly.setAttribute("stroke-linejoin", "round");
+        if (info.role === "today") poly.setAttribute("filter", "url(#" + uid + "-glow)");
         if (info.role !== "base") {
           poly.setAttribute("data-id", info.id);
           poly.style.cursor = "pointer";
