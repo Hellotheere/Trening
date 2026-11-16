@@ -447,7 +447,7 @@
     const side = el("div", { class: "stage-side" });
     side.append(el("div", { class: "map-label" }, "I dag"));
     const preview = el("div", { class: "stage-anat" });
-    if (globalThis.TrenerAnatomy) preview.appendChild(TrenerAnatomy.svg("front", d.body, { crop: "torso" }));
+    if (globalThis.TrenerAnatomy) preview.appendChild(TrenerAnatomy.figure("front", d.body));
     else preview.appendChild(muscleMap(d.muscles));
     const open = el("button", {
       class: "body-open", type: "button",
@@ -1198,7 +1198,7 @@
     wrap.append(el("div", { class: "card settings-card" },
       el("h3", {}, "Sikkerhetskopi"),
       el("p", { class: "muted" }, "JSON-fil med plan, økter og chat."),
-      el("p", { class: "muted" }, "Muskelkartet er tegnet for denne appen. Forside og bakside kan snus."),
+      el("p", { class: "muted" }, "Muskelkart: react-body-highlighter av GV79, MIT-lisens."),
       el("button", { class: "btn", type: "button", onclick: downloadBackup }, "Eksporter"),
       el("button", { class: "btn ghost", type: "button", onclick: () => {
         const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
@@ -1411,25 +1411,23 @@
       el("h1", {}, shown),
       el("p", { class: "lead" }, "Gul er dagens hovedmål. Lysere gul er med på økta. Oransje henter seg."),
     );
-    const stage = el("div", { class: "body-stage", "aria-label": "Muskelkart. Dra for å snu, trykk på en muskel." });
-    wrap.append(stage);
-    const note = el("p", { class: "muscle-readout" }, state.muscleNote || muscleDetail(null));
-    wrap.append(note);
-    wrap.append(el("div", { class: "row" },
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 0; if (state.bodyHandle) state.bodyHandle.setYaw(0, 8); } }, "Foran"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 38; if (state.bodyHandle) state.bodyHandle.setYaw(38, 10); } }, "Skrått"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 180; if (state.bodyHandle) state.bodyHandle.setYaw(180, 8); } }, "Bak"),
-    ));
-    wrap.append(el("button", { class: "btn", type: "button", style: "margin-top:10px", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
-    queueBody(stage, {
-      paint, full: true, yaw: state.bodyYaw || 0,
-      onYaw: (y) => { state.bodyYaw = y; },
-      onPick: (row) => {
-        state.muscleNote = muscleDetail(row);
-        note.textContent = state.muscleNote;
-      },
-      fallback: muscleMap(d.muscles),
-    });
+    const note = el("p", { class: "muscle-readout" }, state.muscleNote || "Trykk på en muskel for navn og siste sett.");
+    const board = el("div", { class: "map-board" });
+    for (const [side, label] of [["front", "Foran"], ["back", "Bak"]]) {
+      const col = el("div", { class: "map-col" });
+      col.append(el("div", { class: "map-kicker" }, label));
+      const fig = el("div", { class: "map-fig" });
+      if (globalThis.TrenerAnatomy) {
+        fig.appendChild(TrenerAnatomy.figure(side, paint, (row) => {
+          state.muscleNote = muscleDetail(row);
+          note.textContent = state.muscleNote;
+        }));
+      }
+      col.append(fig);
+      board.append(col);
+    }
+    wrap.append(board, note);
+    wrap.append(el("button", { class: "btn", type: "button", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
     return wrap;
   }
   function renderDemo() {

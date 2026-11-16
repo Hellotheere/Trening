@@ -1,276 +1,134 @@
-/* Anatomisk muskelkart, tegnet for denne appen. Forside og bakside, med skygge. */
+/* Muskelpolygoner fra react-body-highlighter.
+ * Copyright (c) 2020 GV79
+ * MIT License. Se https://github.com/giavinh79/react-body-highlighter
+ * Tilpasset til vanlig JavaScript for denne appen.
+ */
 (() => {
-  const CX = 200;
-
-  function splineClosed(points) {
-    const n = points.length;
-    const at = (i) => points[(i + n) % n];
-    let d = "M " + points[0][0] + " " + points[0][1];
-    for (let i = 0; i < n; i++) {
-      const p0 = at(i - 1);
-      const p1 = at(i);
-      const p2 = at(i + 1);
-      const p3 = at(i + 2);
-      const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-      const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-      const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-      const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-      d += " C " + c1x.toFixed(1) + " " + c1y.toFixed(1) + " " + c2x.toFixed(1) + " " + c2y.toFixed(1) + " " + p2[0] + " " + p2[1];
-    }
-    return d + " Z";
-  }
-
-  function mirror(points) {
-    return points.map(([x, y]) => [CX * 2 - x, y]);
-  }
-
-  function bodyFrom(left) {
-    const right = mirror(left).slice().reverse();
-    return splineClosed(left.concat(right.slice(1, -1)));
-  }
-
-  function pair(id, left) {
-    return [[id, splineClosed(left)], [id, splineClosed(mirror(left))]];
-  }
-
-  const frontLeft = [
-    [196, 118], [190, 142], [184, 166], [172, 182], [148, 194], [120, 204], [96, 214],
-    [78, 232], [64, 258], [54, 294], [50, 332], [54, 366], [46, 402], [42, 442],
-    [48, 478], [66, 504], [84, 514], [96, 500], [94, 468], [88, 430], [82, 396],
-    [88, 364], [96, 332], [106, 300], [118, 274], [132, 262], [132, 262], [144, 286],
-    [150, 318], [154, 352], [156, 386], [148, 416], [136, 444], [124, 484], [116, 528],
-    [112, 572], [114, 612], [122, 656], [126, 700], [122, 736], [116, 756], [138, 772],
-    [164, 778], [176, 762], [172, 728], [166, 688], [160, 644], [154, 600], [150, 556],
-    [152, 512], [160, 468], [172, 436], [186, 418], [186, 418],
+  const ANTERIOR = [
+  { muscle: "CHEST", points: ["518 416 510 551 580 580 678 555 706 473 620 416", "298 465 314 555 408 580 482 551 478 420 376 420"] },
+  { muscle: "OBLIQUES", points: ["686 633 673 571 588 596 600 641 604 833 657 788 665 698", "339 784 331 718 310 633 322 571 408 592 392 633 392 837"] },
+  { muscle: "ABS", points: ["563 592 580 641 584 780 584 927 563 984 551 1041 514 1078 510 845 506 673 510 571", "437 588 486 571 490 673 486 845 482 1073 445 1037 408 914 408 784 412 645"] },
+  { muscle: "BICEPS", points: ["167 682 180 714 229 661 290 539 278 494 204 559", "714 494 702 547 763 661 816 718 829 690 788 555"] },
+  { muscle: "TRICEPS", points: ["694 555 694 616 759 727 776 702 755 673", "224 694 298 555 298 608 229 731"] },
+  { muscle: "NECK", points: ["555 237 506 335 506 392 616 400 706 449 694 367 633 351 584 306", "290 449 302 371 363 351 412 302 445 245 490 339 486 392 380 396"] },
+  { muscle: "FRONT_DELTOIDS", points: ["784 531 796 478 792 412 759 380 710 363 722 429 714 473", "282 473 212 531 200 478 204 408 245 371 286 371 269 433"] },
+  { muscle: "HEAD", points: ["424 29 400 118 420 196 461 233 498 253 547 224 576 192 592 102 571 24 498 0"] },
+  { muscle: "ABDUCTORS", points: ["527 1102 543 1249 600 1102 620 1000 649 943 600 927 567 1045", "478 1106 449 1253 420 1159 404 1131 396 1073 380 1024 347 939 396 922 416 992 437 1053"] },
+  { muscle: "QUADRICEPS", points: ["347 988 371 1082 371 1278 343 1371 310 1327 294 1200 282 1114 294 1008 322 947", "633 1057 645 1000 669 947 702 1012 710 1118 682 1331 653 1376 624 1286 620 1114", "388 1294 384 1122 412 1184 445 1294 429 1351 400 1461 363 1465 355 1400", "596 1457 555 1290 608 1139 612 1302 641 1396 629 1465", "327 1384 265 1457 257 1367 257 1273 269 1143 294 1335", "718 1131 739 1241 739 1404 727 1457 665 1384 702 1335"] },
+  { muscle: "KNEES", points: ["339 1400 347 1433 355 1473 363 1510 351 1567 298 1567 273 1527 273 1473 302 1441", "657 1400 722 1478 722 1522 698 1571 649 1567 629 1510"] },
+  { muscle: "CALVES", points: ["714 1604 735 1535 767 1612 796 1678 784 1878 796 1955 747 1955", "249 1947 278 1649 282 1604 261 1543 249 1576 224 1616 208 1678 220 1882 208 1955", "727 1951 698 1592 653 1584 641 1624 641 1653 657 1771", "355 1584 359 1624 359 1669 351 1722 351 1767 322 1820 306 1873 269 1947 273 1878 282 1804 286 1755 290 1698 298 1641 302 1588"] },
+  { muscle: "FOREARM", points: ["61 886 102 751 147 702 163 743 192 735 45 976 0 1000", "845 698 833 735 800 731 951 984 1000 1004 935 894 898 763", "776 722 776 776 804 841 853 898 922 1012 947 996", "69 1012 135 906 188 841 216 771 212 718 49 988"] }
+  ];
+  const POSTERIOR = [
+  { muscle: "HEAD", points: ["506 0 460 9 409 55 404 128 451 200 557 200 591 136 596 47 557 13"] },
+  { muscle: "TRAPEZIUS", points: ["447 217 477 217 472 383 477 647 383 532 353 409 311 366 391 332 438 272", "523 217 557 217 566 272 609 328 689 366 647 404 617 532 523 647 532 383"] },
+  { muscle: "BACK_DELTOIDS", points: ["294 370 230 391 174 443 183 536 243 494 272 464", "711 370 783 396 826 447 817 536 749 489 723 451"] },
+  { muscle: "UPPER_BACK", points: ["311 387 281 489 285 553 340 753 472 711 472 664 366 540 336 413", "689 387 719 494 715 562 660 753 528 711 528 664 634 545 664 417"] },
+  { muscle: "TRICEPS", points: ["268 498 179 557 145 723 166 817 217 638 268 557", "736 502 821 557 860 732 834 821 779 630 732 557", "268 583 268 685 230 753 191 774 226 655", "728 583 770 647 804 774 766 753 728 689"] },
+  { muscle: "LOWER_BACK", points: ["477 728 345 770 353 834 494 1021 468 830", "523 728 655 770 647 834 506 1021 532 838"] },
+  { muscle: "FOREARM", points: ["864 757 911 834 932 940 1000 1064 962 1043 881 894 843 838", "136 757 89 838 68 936 0 1064 38 1043 123 885 157 830", "813 796 774 779 791 847 911 1038 932 1089 945 1047", "187 796 221 779 209 843 94 1030 68 1085 51 1047"] },
+  { muscle: "GLUTEAL", points: ["447 996 302 1085 298 1187 315 1260 472 1213 494 1149", "553 991 511 1145 523 1209 681 1260 698 1191 694 1085"] },
+  { muscle: "ADDUCTOR", points: ["481 1230 447 1230 413 1255 451 1443 485 1357 489 1294", "519 1226 557 1234 591 1260 549 1443 519 1362 511 1294"] },
+  { muscle: "HAMSTRING", points: ["289 1221 311 1294 366 1260 353 1353 345 1502 294 1583 289 1468 277 1413 272 1315", "715 1217 694 1289 638 1260 655 1366 664 1502 711 1583 715 1477 728 1421 736 1319", "387 1255 443 1460 404 1668 362 1528 370 1353", "617 1255 634 1362 643 1532 600 1668 562 1464"] },
+  { muscle: "KNEES", points: ["345 1532 311 1591 336 1664 374 1626", "664 1536 630 1630 668 1664 694 1591"] },
+  { muscle: "CALVES", points: ["294 1604 285 1672 247 1796 238 1928 255 1970 285 1932 298 1800 319 1711 319 1668", "374 1651 353 1677 332 1719 311 1804 302 1919 340 2000 387 1906 391 1689", "630 1651 613 1685 617 1906 664 1996 706 1919 689 1796 668 1702", "706 1604 723 1685 757 1791 766 1928 745 1966 723 1936 706 1796 681 1681"] },
+  { muscle: "LEFT_SOLEUS", points: ["285 1957 302 1957 336 2017 306 2200 285 2136 268 1983"] },
+  { muscle: "RIGHT_SOLEUS", points: ["698 1957 719 1957 736 1983 719 2132 702 2196 672 2021"] }
   ];
 
-  const backLeft = [
-    [196, 118], [190, 142], [182, 168], [164, 184], [136, 198], [108, 210], [86, 226],
-    [70, 248], [58, 284], [52, 324], [56, 360], [48, 398], [44, 438], [50, 476],
-    [68, 506], [88, 516], [100, 500], [96, 464], [90, 424], [86, 388], [94, 354],
-    [104, 322], [116, 292], [128, 270], [128, 270], [140, 292], [136, 332], [130, 372],
-    [124, 410], [116, 446], [110, 490], [106, 534], [108, 578], [116, 622], [126, 666],
-    [132, 708], [128, 740], [122, 758], [144, 774], [170, 780], [180, 764], [176, 728],
-    [168, 684], [160, 640], [154, 596], [150, 552], [152, 508], [160, 468], [174, 436],
-    [188, 416], [188, 416],
-  ];
+  const TO_PAINT = {
+    CHEST: "pecs",
+    FRONT_DELTOIDS: "front_delt",
+    BACK_DELTOIDS: "rear_delt",
+    BICEPS: "biceps",
+    TRICEPS: "triceps",
+    FOREARM: "forearm",
+    ABS: "abs",
+    OBLIQUES: "oblique",
+    TRAPEZIUS: "trap",
+    UPPER_BACK: "lat",
+    QUADRICEPS: "quad",
+    HAMSTRING: "ham",
+    GLUTEAL: "glute",
+    ABDUCTORS: "glute",
+    CALVES: "calf",
+    LEFT_SOLEUS: "calf",
+    RIGHT_SOLEUS: "calf",
+  };
+  const BASE = { HEAD: 1, NECK: 1, KNEES: 1 };
+  const EXTRA_NAME = {
+    LOWER_BACK: "Korsrygg",
+    ADDUCTOR: "Innerside lår",
+    NECK: "Nakke",
+    HEAD: "Hode",
+    KNEES: "Kne",
+  };
 
-  const frontMuscles = [].concat(
-    pair("trap", [[190, 156], [168, 164], [140, 176], [112, 190], [96, 206], [120, 200], [156, 184], [182, 168]]),
-    pair("front_delt", [[118, 198], [96, 206], [78, 226], [72, 252], [90, 262], [112, 248], [126, 222]]),
-    pair("side_delt", [[100, 202], [78, 214], [62, 238], [60, 264], [78, 272], [100, 254], [112, 226]]),
-    pair("pecs", [[184, 196], [156, 190], [128, 204], [114, 228], [118, 256], [142, 274], [170, 276], [188, 254], [192, 220]]),
-    pair("biceps", [[100, 258], [82, 274], [70, 308], [72, 344], [90, 358], [108, 346], [114, 308], [108, 274]]),
-    pair("triceps", [[74, 262], [58, 286], [54, 324], [64, 354], [80, 346], [84, 308], [78, 276]]),
-    pair("forearm", [[86, 362], [68, 392], [56, 434], [54, 474], [72, 500], [96, 492], [104, 452], [102, 406], [94, 372]]),
-    pair("oblique", [[158, 268], [146, 292], [144, 336], [150, 378], [168, 396], [180, 364], [178, 310], [170, 280]]),
-    pair("quad", [[176, 430], [154, 442], [136, 478], [124, 528], [118, 578], [128, 622], [156, 632], [178, 604], [188, 548], [188, 484], [180, 446]]),
-    pair("calf", [[150, 640], [136, 678], [130, 724], [140, 758], [166, 760], [176, 722], [170, 676], [160, 644]])
-  );
-  frontMuscles.push(
-    ["abs", splineClosed([[176, 268], [158, 272], [154, 292], [160, 308], [176, 306]])],
-    ["abs", splineClosed(mirror([[176, 268], [158, 272], [154, 292], [160, 308], [176, 306]]))],
-    ["abs", splineClosed([[174, 312], [156, 316], [152, 338], [160, 354], [176, 350]])],
-    ["abs", splineClosed(mirror([[174, 312], [156, 316], [152, 338], [160, 354], [176, 350]]))],
-    ["abs", splineClosed([[172, 358], [156, 362], [154, 384], [164, 398], [178, 392]])],
-    ["abs", splineClosed(mirror([[172, 358], [156, 362], [154, 384], [164, 398], [178, 392]]))]
-  );
-
-  const backMuscles = [].concat(
-    pair("trap", [[192, 150], [164, 156], [132, 172], [104, 192], [88, 210], [118, 202], [158, 180], [186, 160]]),
-    pair("rear_delt", [[112, 204], [88, 216], [70, 242], [68, 268], [90, 276], [114, 254], [122, 222]]),
-    pair("side_delt", [[96, 206], [74, 218], [60, 244], [60, 270], [80, 266], [102, 236]]),
-    pair("lat", [[156, 210], [128, 226], [112, 268], [114, 328], [128, 378], [152, 400], [174, 372], [180, 310], [172, 246]]),
-    pair("triceps", [[86, 270], [68, 294], [60, 336], [66, 372], [88, 378], [102, 346], [100, 304], [92, 276]]),
-    pair("forearm", [[84, 380], [66, 414], [56, 458], [64, 498], [90, 502], [104, 462], [102, 414], [94, 384]]),
-    pair("glute", [[176, 412], [150, 418], [128, 446], [122, 486], [142, 516], [170, 518], [190, 492], [194, 448]]),
-    pair("ham", [[164, 516], [142, 534], [126, 584], [120, 636], [138, 662], [166, 656], [182, 610], [184, 548]]),
-    pair("calf", [[146, 668], [128, 706], [124, 748], [142, 772], [168, 772], [180, 740], [174, 698], [160, 670]])
-  );
-
-  const DEFS = `
-    <linearGradient id="g-skin" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f7e7d8"/>
-      <stop offset="0.42" stop-color="#e4c3a6"/>
-      <stop offset="1" stop-color="#b8886c"/>
-    </linearGradient>
-    <linearGradient id="g-hair" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#3a342f"/>
-      <stop offset="1" stop-color="#1c1917"/>
-    </linearGradient>
-    <radialGradient id="g-today" cx="32%" cy="26%" r="78%">
-      <stop offset="0" stop-color="#f4ffb4"/>
-      <stop offset="0.5" stop-color="#d6f04a"/>
-      <stop offset="1" stop-color="#9bb824"/>
-    </radialGradient>
-    <radialGradient id="g-assist" cx="32%" cy="26%" r="78%">
-      <stop offset="0" stop-color="#f7ffd4"/>
-      <stop offset="0.55" stop-color="#e3f29a"/>
-      <stop offset="1" stop-color="#c2d46a"/>
-    </radialGradient>
-    <radialGradient id="g-recovering" cx="32%" cy="26%" r="78%">
-      <stop offset="0" stop-color="#ffd7b0"/>
-      <stop offset="0.5" stop-color="#ff9a45"/>
-      <stop offset="1" stop-color="#d86a22"/>
-    </radialGradient>
-    <radialGradient id="g-idle" cx="30%" cy="24%" r="80%">
-      <stop offset="0" stop-color="#e4e7eb"/>
-      <stop offset="0.55" stop-color="#b7bec6"/>
-      <stop offset="1" stop-color="#7e878f"/>
-    </radialGradient>
-    <radialGradient id="g-shade" cx="70%" cy="40%" r="70%">
-      <stop offset="0" stop-color="#000" stop-opacity="0"/>
-      <stop offset="1" stop-color="#3a2418" stop-opacity=".28"/>
-    </radialGradient>
-    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="8" stdDeviation="6" flood-color="#1a120e" flood-opacity=".28"/>
-    </filter>`;
-
-  function face() {
-    return `
-      <path fill="url(#g-hair)" d="M160,64 C158,28 176,14 200,12 C224,14 242,28 240,64 C228,44 214,36 200,36 C186,36 172,44 160,64 Z"/>
-      <path fill="#3a302c" d="M172,72 C178,66 188,66 194,72 C186,74 178,76 172,72 Z"/>
-      <path fill="#3a302c" d="M228,72 C222,66 212,66 206,72 C214,74 222,76 228,72 Z"/>
-      <path fill="none" stroke="#8a5a46" stroke-width="2" stroke-linecap="round" d="M200,84 C199,98 198,108 200,114"/>
-      <path fill="none" stroke="#8a5a46" stroke-width="1.5" stroke-linecap="round" d="M193,112 C196,114 204,114 207,112"/>
-      <path fill="none" stroke="#a56d58" stroke-width="1.7" stroke-linecap="round" d="M188,122 L212,122"/>
-      <path fill="#e4b193" d="M150,74 C140,78 138,92 146,102 C152,108 158,100 158,88 C158,80 156,74 150,74 Z"/>
-      <path fill="#e4b193" d="M250,74 C260,78 262,92 254,102 C248,108 242,100 242,88 C242,80 244,74 250,74 Z"/>`;
+  function roleFor(muscle, paint) {
+    if (BASE[muscle]) return { role: "base", row: null, id: muscle };
+    const id = TO_PAINT[muscle];
+    if (!id) return { role: "fresh", row: null, id: muscle };
+    const row = (paint || []).find((m) => m.id === id) || null;
+    return { role: (row && row.role) || "fresh", row, id };
   }
 
-  function head() {
-    return `<path fill="url(#g-skin)" d="M200,16 C170,18 152,40 152,70 C152,94 164,110 178,120 C188,126 194,128 200,128 C206,128 212,126 222,120 C236,110 248,94 248,70 C248,40 230,18 200,16 Z"/>`;
-  }
-
-  function svgFor(side, crop) {
-    const body = side === "back" ? bodyFrom(backLeft) : bodyFrom(frontLeft);
-    const muscles = side === "back" ? backMuscles : frontMuscles;
-    const parts = muscles.map(([id, d]) => `<path class="anat" data-id="${id}" d="${d}"/>`).join("");
-    const view = crop === "torso" ? "70 10 260 340" : "20 8 360 800";
-    return `<svg class="anat-svg" viewBox="${view}" role="img" aria-label="${side === "back" ? "Muskelkart bakfra" : "Muskelkart forfra"}">
-      <defs>${DEFS}
-        <clipPath id="clip-${side}"><path d="${body}"/></clipPath>
-      </defs>
-      <ellipse cx="200" cy="804" rx="70" ry="10" fill="#000" opacity=".18"/>
-      <g filter="url(#soft)">
-        ${head()}
-        <path fill="url(#g-skin)" d="${body}"/>
-        <path fill="url(#g-shade)" d="${body}"/>
-      </g>
-      <g clip-path="url(#clip-${side})">${parts}</g>
-      ${side === "front" ? face() : `<path fill="url(#g-hair)" d="M158,70 C156,34 176,22 200,20 C224,22 244,34 242,70 C228,50 214,44 200,44 C186,44 172,50 158,70 Z"/>`}
-    </svg>`;
-  }
-
-  const FILL = { today: "url(#g-today)", assist: "url(#g-assist)", recovering: "url(#g-recovering)", fresh: "url(#g-idle)" };
-
-  function paintSvg(root, paint) {
-    const map = {};
-    for (const row of paint || []) map[row.id] = row;
-    root.querySelectorAll("path.anat").forEach((node) => {
-      const row = map[node.getAttribute("data-id")];
-      const role = row ? row.role : "fresh";
-      node.setAttribute("fill", FILL[role] || FILL.fresh);
-      node.setAttribute("stroke", role === "fresh" ? "rgba(60,40,32,.18)" : "rgba(40,30,10,.28)");
-      node.setAttribute("stroke-width", role === "today" ? "1.4" : "0.8");
-    });
-  }
-
-  function svg(side, paint, opts) {
-    const html = svgFor(side, opts && opts.crop);
-    const wrap = document.createElement("div");
-    wrap.innerHTML = html;
-    const node = wrap.firstElementChild;
-    paintSvg(node, paint);
-    return node;
-  }
-
-  function mount(container, opts) {
-    opts = opts || {};
-    container.innerHTML = "";
-    container.classList.add("anatomy-stage");
-    const turn = document.createElement("div");
-    turn.className = "anatomy-turn";
-    const front = document.createElement("div");
-    front.className = "anatomy-face";
-    const back = document.createElement("div");
-    back.className = "anatomy-face back";
-    front.appendChild(svg("front", opts.paint));
-    back.appendChild(svg("back", opts.paint));
-    const light = document.createElement("div");
-    light.className = "anatomy-light";
-    turn.append(front, back, light);
-    container.appendChild(turn);
-
-    let yaw = Number(opts.yaw) || 0;
-    let tilt = 7;
-    function apply() {
-      let y = yaw % 360;
-      if (y < 0) y += 360;
-      const showFront = y < 90 || y > 270;
-      front.style.pointerEvents = showFront ? "auto" : "none";
-      back.style.pointerEvents = showFront ? "none" : "auto";
-      turn.style.transform = "rotateX(" + tilt.toFixed(2) + "deg) rotateY(" + yaw.toFixed(2) + "deg)";
-      const lx = 28 + Math.sin(yaw * Math.PI / 180) * -22;
-      light.style.setProperty("--lx", lx + "%");
-      light.style.setProperty("--ly", (16 + tilt) + "%");
-    }
-    apply();
-
-    let dragging = false;
-    let moved = 0;
-    let lx = 0;
-    let ly = 0;
-    function down(e) {
-      dragging = true;
-      moved = 0;
-      lx = e.clientX;
-      ly = e.clientY;
-      turn.classList.add("dragging");
-      try { container.setPointerCapture(e.pointerId); } catch (err) {}
-    }
-    function move(e) {
-      if (!dragging) return;
-      const dx = e.clientX - lx;
-      const dy = e.clientY - ly;
-      lx = e.clientX;
-      ly = e.clientY;
-      moved += Math.abs(dx) + Math.abs(dy);
-      yaw += dx * 0.55;
-      tilt = Math.max(-16, Math.min(20, tilt - dy * 0.12));
-      if (opts.onYaw) opts.onYaw(yaw);
-      apply();
-      if (e.cancelable) e.preventDefault();
-    }
-    function up(e) {
-      if (!dragging) return;
-      dragging = false;
-      turn.classList.remove("dragging");
-      if (moved > 10) return;
-      const hit = document.elementFromPoint(e.clientX, e.clientY);
-      const node = hit && hit.closest && hit.closest("[data-id]");
-      const id = node && node.getAttribute("data-id");
-      const row = (opts.paint || []).find((m) => m.id === id) || null;
-      if (opts.onPick) opts.onPick(row);
-    }
-    container.addEventListener("pointerdown", down);
-    container.addEventListener("pointermove", move);
-    container.addEventListener("pointerup", up);
-    container.addEventListener("pointercancel", () => { dragging = false; turn.classList.remove("dragging"); });
-
-    return {
-      setYaw(next, nextTilt) {
-        yaw = next;
-        if (nextTilt != null) tilt = nextTilt;
-        apply();
-      },
-      dispose() {
-        container.removeEventListener("pointerdown", down);
-        container.removeEventListener("pointermove", move);
-        container.removeEventListener("pointerup", up);
-      },
+  let figN = 0;
+  function figure(side, paint, onPick) {
+    const uid = "rbh" + (++figN);
+    const rows = side === "back" ? POSTERIOR : ANTERIOR;
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 1000 2220");
+    svg.setAttribute("class", "rbh");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", side === "back" ? "Muskler bakfra" : "Muskler forfra");
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    defs.innerHTML = `
+      <radialGradient id="${uid}-today" cx="35%" cy="28%" r="75%">
+        <stop offset="0" stop-color="#f2ff9a"/><stop offset="1" stop-color="#c6df22"/>
+      </radialGradient>
+      <radialGradient id="${uid}-assist" cx="35%" cy="28%" r="75%">
+        <stop offset="0" stop-color="#f7ffd0"/><stop offset="1" stop-color="#d5e98a"/>
+      </radialGradient>
+      <radialGradient id="${uid}-recovering" cx="35%" cy="28%" r="75%">
+        <stop offset="0" stop-color="#ffd0a4"/><stop offset="1" stop-color="#f0842c"/>
+      </radialGradient>
+      <radialGradient id="${uid}-fresh" cx="35%" cy="28%" r="78%">
+        <stop offset="0" stop-color="#8b939c"/><stop offset="1" stop-color="#5c656e"/>
+      </radialGradient>`;
+    svg.appendChild(defs);
+    const gid = (role) => "url(#" + uid + "-" + role + ")";
+    const fill = {
+      today: gid("today"),
+      assist: gid("assist"),
+      recovering: gid("recovering"),
+      fresh: gid("fresh"),
+      base: "#2c3138",
     };
+    for (const group of rows) {
+      const info = roleFor(group.muscle, paint);
+      for (const points of group.points) {
+        const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+        poly.setAttribute("points", points);
+        poly.setAttribute("fill", fill[info.role] || fill.fresh);
+        poly.setAttribute("stroke", info.role === "base" ? "#24282e" : "rgba(12,14,16,.55)");
+        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "6");
+        poly.setAttribute("stroke-linejoin", "round");
+        if (info.role !== "base") {
+          poly.setAttribute("data-id", info.id);
+          poly.style.cursor = "pointer";
+          if (onPick) {
+            poly.addEventListener("click", (e) => {
+              e.stopPropagation();
+              if (info.row) onPick(info.row);
+              else onPick({ id: info.id, name: EXTRA_NAME[group.muscle] || group.muscle, role: "fresh", sets: 0, kg: 0, date: "" });
+            });
+          }
+        }
+        svg.appendChild(poly);
+      }
+    }
+    return svg;
   }
 
-  globalThis.TrenerAnatomy = { svg, mount, paintSvg };
+  globalThis.TrenerAnatomy = { figure };
 })();

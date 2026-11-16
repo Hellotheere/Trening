@@ -298,34 +298,16 @@ html[data-theme="light"] .nav { background: rgba(255,255,255,.9); }
 .map-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #d6ff4a; }
 .bodymap { width: 118px; height: 188px; }
 .body-open { display: block; width: 100%; border: 0; background: transparent; padding: 0; }
-.stage-anat { width: 132px; height: 176px; }
-.stage-anat svg { width: 100%; height: 100%; display: block; }
-.body-screen h1 { font-size: 34px; }
-.body-stage {
-  height: 490px; border-radius: 28px; overflow: hidden; margin-bottom: 8px;
-  background:
-    radial-gradient(220px 140px at 50% 12%, rgba(214,255,74,.12), transparent 68%),
-    #14110f;
-  touch-action: none;
-}
-.anatomy-stage { width: 100%; height: 100%; perspective: 1200px; }
-.body-stage.anatomy-stage { height: 500px; }
-.anatomy-turn {
-  width: 100%; height: 100%; position: relative;
-  transform-style: preserve-3d;
-  transition: transform .4s cubic-bezier(.2,.7,.2,1);
-}
-.anatomy-turn.dragging { transition: none; }
-.anatomy-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-.anatomy-face.back { transform: rotateY(180deg); }
-.anatomy-face svg { width: 100%; height: 100%; display: block; }
-.anatomy-light {
-  position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(closest-side at var(--lx, 30%) var(--ly, 18%), rgba(255,255,255,.2), transparent 72%);
-  mix-blend-mode: soft-light;
-}
-.muscle-readout { min-height: 3.6em; margin: 8px 0 10px; }
-html[data-theme="light"] .body-stage { background: #f3efe8; }
+.stage-anat { width: 112px; height: 200px; }
+.stage-anat svg, .map-fig svg { width: 100%; height: 100%; display: block; }
+.body-screen h1 { font-size: 32px; }
+.map-board { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.map-col { background: #121418; border-radius: 22px; padding: 8px 6px 10px; }
+.map-kicker { text-align: center; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #d6ff4a; margin-bottom: 4px; }
+.map-fig { height: 460px; }
+.muscle-readout { min-height: 3.2em; margin: 10px 0; }
+html[data-theme="light"] .map-col { background: #ece7df; }
+html[data-theme="light"] .map-kicker { color: #3f6200; }
 .muscle { fill: #3c463e; }
 .muscle.m-today { fill: #d6ff4a; }
 .muscle.m-recovering { fill: #ffb086; }
