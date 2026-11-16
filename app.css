@@ -298,17 +298,34 @@ html[data-theme="light"] .nav { background: rgba(255,255,255,.9); }
 .map-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #d6ff4a; }
 .bodymap { width: 118px; height: 188px; }
 .body-open { display: block; width: 100%; border: 0; background: transparent; padding: 0; }
-.stage-body { width: 132px; height: 188px; display: block; }
+.stage-anat { width: 132px; height: 176px; }
+.stage-anat svg { width: 100%; height: 100%; display: block; }
 .body-screen h1 { font-size: 34px; }
 .body-stage {
-  height: 460px; border-radius: 28px; overflow: hidden; margin-bottom: 10px;
+  height: 490px; border-radius: 28px; overflow: hidden; margin-bottom: 8px;
   background:
-    radial-gradient(180px 120px at 50% 18%, rgba(214,255,74,.14), transparent 70%),
-    #10140f;
+    radial-gradient(220px 140px at 50% 12%, rgba(214,255,74,.12), transparent 68%),
+    #14110f;
+  touch-action: none;
 }
-.body-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-.muscle-readout { min-height: 4.4em; margin: 8px 0 12px; }
-html[data-theme="light"] .body-stage { background: #e7f0dc; }
+.anatomy-stage { width: 100%; height: 100%; perspective: 1200px; }
+.body-stage.anatomy-stage { height: 500px; }
+.anatomy-turn {
+  width: 100%; height: 100%; position: relative;
+  transform-style: preserve-3d;
+  transition: transform .4s cubic-bezier(.2,.7,.2,1);
+}
+.anatomy-turn.dragging { transition: none; }
+.anatomy-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.anatomy-face.back { transform: rotateY(180deg); }
+.anatomy-face svg { width: 100%; height: 100%; display: block; }
+.anatomy-light {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(closest-side at var(--lx, 30%) var(--ly, 18%), rgba(255,255,255,.2), transparent 72%);
+  mix-blend-mode: soft-light;
+}
+.muscle-readout { min-height: 3.6em; margin: 8px 0 10px; }
+html[data-theme="light"] .body-stage { background: #f3efe8; }
 .muscle { fill: #3c463e; }
 .muscle.m-today { fill: #d6ff4a; }
 .muscle.m-recovering { fill: #ffb086; }

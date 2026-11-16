@@ -399,7 +399,7 @@
     for (const job of jobs) {
       let handle = null;
       try {
-        if (globalThis.TrenerBody) handle = TrenerBody.mount(job.canvas, job.opts);
+        if (globalThis.TrenerAnatomy) handle = TrenerAnatomy.mount(job.canvas, job.opts);
       } catch (e) { handle = null; }
       if (handle) {
         liveBodies.push(handle);
@@ -446,16 +446,15 @@
     left.append(el("p", { class: "stage-level" }, "Nivå " + ((d.xp && d.xp.level) || 1) + " · " + (rings.done || 0) + " av " + (rings.goal || 3) + " økter"));
     const side = el("div", { class: "stage-side" });
     side.append(el("div", { class: "map-label" }, "I dag"));
-    const canvas = el("canvas", { class: "stage-body", "aria-label": "Muskelkart i 3D. Åpne for å snu kroppen." });
+    const preview = el("div", { class: "stage-anat" });
+    if (globalThis.TrenerAnatomy) preview.appendChild(TrenerAnatomy.svg("front", d.body, { crop: "torso" }));
+    else preview.appendChild(muscleMap(d.muscles));
     const open = el("button", {
       class: "body-open", type: "button",
-      onclick: () => { state.view = "body"; state.bodyYaw = 0.28; state.muscleNote = ""; render(); },
-    }, canvas);
+      "aria-label": "Åpne muskelkartet",
+      onclick: () => { state.view = "body"; state.bodyYaw = 0; state.muscleNote = ""; render(); },
+    }, preview);
     side.append(open);
-    queueBody(canvas, {
-      paint: d.body, compact: true, yaw: 0.42,
-      fallback: muscleMap(d.muscles),
-    });
     side.append(el("p", { class: "map-note" }, muscleLine(d.body)));
     stage.append(left, side);
     return stage;
@@ -1199,6 +1198,7 @@
     wrap.append(el("div", { class: "card settings-card" },
       el("h3", {}, "Sikkerhetskopi"),
       el("p", { class: "muted" }, "JSON-fil med plan, økter og chat."),
+      el("p", { class: "muted" }, "Muskelkartet er tegnet for denne appen. Forside og bakside kan snus."),
       el("button", { class: "btn", type: "button", onclick: downloadBackup }, "Eksporter"),
       el("button", { class: "btn ghost", type: "button", onclick: () => {
         const inp = document.createElement("input"); inp.type = "file"; inp.accept = "application/json,.json";
@@ -1411,17 +1411,18 @@
       el("h1", {}, shown),
       el("p", { class: "lead" }, "Gul er dagens hovedmål. Lysere gul er med på økta. Oransje henter seg."),
     );
-    const canvas = el("canvas", { class: "body-canvas", "aria-label": "Mannskropp i 3D. Dra for å rotere, trykk på en muskel." });
-    wrap.append(el("div", { class: "body-stage" }, canvas));
+    const stage = el("div", { class: "body-stage", "aria-label": "Muskelkart. Dra for å snu, trykk på en muskel." });
+    wrap.append(stage);
     const note = el("p", { class: "muscle-readout" }, state.muscleNote || muscleDetail(null));
     wrap.append(note);
     wrap.append(el("div", { class: "row" },
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 0.2; if (state.bodyHandle) state.bodyHandle.setYaw(0.2); } }, "Foran"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = Math.PI; if (state.bodyHandle) state.bodyHandle.setYaw(Math.PI); } }, "Bak"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 0; if (state.bodyHandle) state.bodyHandle.setYaw(0, 8); } }, "Foran"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 38; if (state.bodyHandle) state.bodyHandle.setYaw(38, 10); } }, "Skrått"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 180; if (state.bodyHandle) state.bodyHandle.setYaw(180, 8); } }, "Bak"),
     ));
     wrap.append(el("button", { class: "btn", type: "button", style: "margin-top:10px", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
-    queueBody(canvas, {
-      paint, compact: false, full: true, yaw: state.bodyYaw == null ? 0.28 : state.bodyYaw,
+    queueBody(stage, {
+      paint, full: true, yaw: state.bodyYaw || 0,
       onYaw: (y) => { state.bodyYaw = y; },
       onPick: (row) => {
         state.muscleNote = muscleDetail(row);
