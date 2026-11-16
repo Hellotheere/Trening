@@ -16,11 +16,14 @@
   --radius: 28px;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
-  --nav: calc(72px + var(--safe-b));
+  --tab-h: 60px;
+  --tab-gap: 8px;
+  --nav: calc(var(--tab-h) + var(--tab-gap) + var(--safe-b));
+  --scroll-pad: calc(var(--nav) + 48px);
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html { font-size: 100%; }
+html { font-size: 100%; scroll-padding-bottom: var(--scroll-pad); }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 html, body { margin: 0; background: var(--bg); color: var(--text); touch-action: manipulation;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
@@ -36,7 +39,7 @@ button { cursor: pointer; }
 .boot b { display: block; font-size: 28px; letter-spacing: -.04em; margin-bottom: 8px; }
 .boot span { color: var(--muted); }
 
-.wrap { max-width: 480px; margin: 0 auto; padding: calc(24px + var(--safe-t)) 16px calc(var(--nav) + 24px); }
+.wrap { max-width: 480px; margin: 0 auto; padding: calc(24px + var(--safe-t)) 16px var(--scroll-pad); }
 .wrap.solo { padding-bottom: calc(28px + var(--safe-b)); }
 
 h1 { font-size: 28px; line-height: 1.1; letter-spacing: -.03em; font-weight: 650; margin: 0 0 8px; }
