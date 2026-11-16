@@ -44,17 +44,18 @@ function profile(kw) {
   }, kw || {}));
 }
 
-test("mandagsmalen har brukerens ni øvelser", () => {
-  const ids = Array.from(T.mondayExercises(), (ex) => ex.id);
-  same(ids, [
-    "maskin_brystpress", "incline_manualpress", "pec_fly_maskin",
+test("egen plan deler brystdag og skuldre", () => {
+  const chest = Array.from(T.mondayExercises(), (ex) => ex.id);
+  const arms = Array.from(T.armDayExercises(), (ex) => ex.id);
+  same(chest, ["maskin_brystpress", "incline_manualpress", "pec_fly_maskin"]);
+  same(arms, [
     "incline_biceps", "preacher_curl", "triceps_pushdown",
     "lateral", "reverse_pec_fly", "front_raise",
   ]);
   const push = T.EXERCISES.triceps_pushdown;
   const blob = (push.desc + " " + push.tips).toLowerCase();
   assert(blob.includes("stang") && blob.includes("tau"));
-  for (const ex of T.mondayExercises()) {
+  for (const ex of T.mondayExercises().concat(T.armDayExercises())) {
     assert.strictEqual(ex.sets, 3);
     assert.strictEqual(ex.reps, "8–12");
     assert(ex.rest_sec >= 60 && ex.rest_sec <= 90);
@@ -62,9 +63,12 @@ test("mandagsmalen har brukerens ni øvelser", () => {
   }
   const plan = T.defaultCustomPlan();
   assert.strictEqual(plan.days[0].weekday, "mandag");
-  assert.strictEqual(plan.days[0].title, "Bryst, armer og skuldre");
-  same(Array.from(plan.days[0].exercises, (ex) => ex.id), ids);
-  assert(plan.days.slice(1).every((d) => !d.exercises.length));
+  assert.strictEqual(plan.days[0].title, "Brystdag");
+  same(Array.from(plan.days[0].exercises, (ex) => ex.id), chest);
+  const thu = plan.days.find((d) => d.weekday === "torsdag");
+  assert.strictEqual(thu.title, "Skuldre og armer");
+  same(Array.from(thu.exercises, (ex) => ex.id), arms);
+  assert(plan.days.filter((d) => d.weekday !== "mandag" && d.weekday !== "torsdag").every((d) => !d.exercises.length));
 });
 
 test("overload-hint foreslår +2,5 kg etter 3×12", () => {
@@ -108,7 +112,7 @@ test("materialiser og sjekk inn uten å overskrive øvelser", () => {
   });
   assert.strictEqual(plan.days[0].date, "2026-11-09");
   assert.strictEqual(plan.days[0].weekday, "mandag");
-  assert.strictEqual(plan.days[0].exercises.length, 9);
+  assert.strictEqual(plan.days[0].exercises.length, 3);
   assert.strictEqual(plan.source, "custom");
   const logs = [{
     date: "2026-11-02", completed: true,
@@ -164,7 +168,7 @@ test("migrering bevarer generert plan", () => {
   state.plan_source = "custom";
   const own = T.resolvePlan(state, MONDAY);
   assert.strictEqual(own.source, "custom");
-  assert.strictEqual(own.days[0].title, "Bryst, armer og skuldre");
+  assert.strictEqual(own.days[0].title, "Brystdag");
 });
 
 test("1RM og personlige rekorder", () => {
@@ -425,6 +429,74 @@ test("streak-frys bevarer raden", () => {
   assert.strictEqual(kept.streak, 1);
 });
 
+test("gammel samlet mandag deles uten å røre loggen", () => {
+  const nine = [
+    "maskin_brystpress", "incline_manualpress", "pec_fly_maskin",
+    "incline_biceps", "preacher_curl", "triceps_pushdown",
+    "lateral", "reverse_pec_fly", "front_raise",
+  ].map((id) => ({ id, name: id, sets: 4, reps: "8–12", rest_sec: 75 }));
+  const workouts = [{
+    date: "2026-11-09", completed: true,
+    exercises: [{ id: "preacher_curl", name: "Preacher curl", sets: [{ reps: 10, weight_kg: 14, done: true }] }],
+  }];
+  const state = {
+    plan_source: "generated",
+    workouts,
+    custom_plan: {
+      days: [
+        { weekday: "mandag", title: "Bryst, armer og skuldre", exercises: nine },
+        { weekday: "tirsdag", exercises: [] },
+        { weekday: "onsdag", exercises: [] },
+        { weekday: "torsdag", exercises: [] },
+        { weekday: "fredag", exercises: [] },
+        { weekday: "lørdag", exercises: [] },
+        { weekday: "søndag", exercises: [] },
+      ],
+    },
+  };
+  const before = JSON.stringify(state.workouts);
+  T.migrateState(state);
+  assert.strictEqual(JSON.stringify(state.workouts), before);
+  assert.strictEqual(state.plan_source, "custom");
+  const mon = state.custom_plan.days.find((d) => d.weekday === "mandag");
+  const thu = state.custom_plan.days.find((d) => d.weekday === "torsdag");
+  same(mon.exercises.map((e) => e.id), ["maskin_brystpress", "incline_manualpress", "pec_fly_maskin"]);
+  assert.strictEqual(mon.title, "Brystdag");
+  assert.strictEqual(mon.exercises[0].sets, 4);
+  assert.strictEqual(mon.exercises[0].rest_sec, 75);
+  same(thu.exercises.map((e) => e.id), [
+    "incline_biceps", "preacher_curl", "triceps_pushdown",
+    "lateral", "reverse_pec_fly", "front_raise",
+  ]);
+  assert.strictEqual(thu.title, "Skuldre og armer");
+  assert.strictEqual(thu.exercises.find((e) => e.id === "preacher_curl").sets, 4);
+  const plan = T.resolvePlan(state, "2026-11-16");
+  const today = T.todaySession(plan, "2026-11-16");
+  assert.strictEqual(today.weekday, "mandag");
+  assert.strictEqual(today.title, "Brystdag");
+  assert.strictEqual(today.exercises.length, 3);
+  const arms = T.todaySession(plan, "2026-11-19");
+  assert.strictEqual(arms.weekday, "torsdag");
+  assert.strictEqual(arms.title, "Skuldre og armer");
+  const paint = T.bodyPaint({ plan, workouts }, "2026-11-16");
+  assert.strictEqual(paint.find((m) => m.id === "pecs").role, "today");
+  assert.strictEqual(paint.find((m) => m.id === "front_delt").role, "assist");
+  assert.strictEqual(paint.find((m) => m.id === "triceps").role, "assist");
+  assert.strictEqual(paint.find((m) => m.id === "biceps").role, "fresh");
+  const armPaint = T.bodyPaint({ plan, workouts: [] }, "2026-11-19");
+  for (const id of ["biceps", "triceps", "side_delt", "rear_delt", "front_delt"]) {
+    assert.strictEqual(armPaint.find((m) => m.id === id).role, "today", id);
+  }
+  assert.strictEqual(armPaint.find((m) => m.id === "pecs").role, "fresh");
+  const sore = T.bodyPaint({
+    plan,
+    workouts: [{ date: "2026-11-18", completed: true, exercises: [{ id: "benk", muscle: "bryst", sets: [{ reps: 8, weight_kg: 60, done: true }] }] }],
+  }, "2026-11-19");
+  assert.strictEqual(sore.find((m) => m.id === "pecs").role, "recovering");
+  assert.strictEqual(sore.find((m) => m.id === "pecs").sets, 1);
+  assert.strictEqual(sore.find((m) => m.id === "pecs").kg, 60);
+});
+
 test("dialekt og skrivefeil forstås", () => {
   const p = profile({ name: "Inifi", equipment: "treningssenter" });
   const plan = T.generatePlan(p, { start: "2026-11-15" });
@@ -513,7 +585,7 @@ test("ukedag følger kalenderen, mandag først, også søndag", () => {
   assert.strictEqual(T.isTrainingDay(friday), false);
   const next = T.nextTrainingDay(plan, "2026-11-13");
   assert.strictEqual(next.weekday, "mandag");
-  assert.strictEqual(next.title, "Bryst, armer og skuldre");
+  assert.strictEqual(next.title, "Brystdag");
   const sunday = T.todaySession(plan, "2026-11-15");
   assert.strictEqual(sunday.weekday, "søndag");
   assert.notStrictEqual(sunday.weekday, "mandag");

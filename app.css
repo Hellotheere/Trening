@@ -297,6 +297,18 @@ html[data-theme="light"] .nav { background: rgba(255,255,255,.9); }
 .stage-side { display: flex; flex-direction: column; align-items: center; }
 .map-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #d6ff4a; }
 .bodymap { width: 118px; height: 188px; }
+.body-open { display: block; width: 100%; border: 0; background: transparent; padding: 0; }
+.stage-body { width: 132px; height: 188px; display: block; }
+.body-screen h1 { font-size: 34px; }
+.body-stage {
+  height: 460px; border-radius: 28px; overflow: hidden; margin-bottom: 10px;
+  background:
+    radial-gradient(180px 120px at 50% 18%, rgba(214,255,74,.14), transparent 70%),
+    #10140f;
+}
+.body-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+.muscle-readout { min-height: 4.4em; margin: 8px 0 12px; }
+html[data-theme="light"] .body-stage { background: #e7f0dc; }
 .muscle { fill: #3c463e; }
 .muscle.m-today { fill: #d6ff4a; }
 .muscle.m-recovering { fill: #ffb086; }

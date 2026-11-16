@@ -65,7 +65,7 @@ def main():
             page.click("text=Min egen plan")
             page.wait_for_selector("text=Rediger uken")
             page.click(".week button:has-text('man')")
-            page.wait_for_selector("text=Bryst, armer og skuldre")
+            page.wait_for_selector("text=Brystdag")
             page.wait_for_selector("text=Brystpress i maskin")
             time.sleep(0.35)
             page.screenshot(path=str(OUT / "own-plan-monday.png"), full_page=False)

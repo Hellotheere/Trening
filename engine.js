@@ -1269,6 +1269,120 @@
     });
   }
 
+  const MUSCLE_NAMES = {
+    pecs: "Bryst",
+    front_delt: "Fremre skulder",
+    side_delt: "Side skulder",
+    rear_delt: "Bakre skulder",
+    biceps: "Biceps",
+    triceps: "Triceps",
+    forearm: "Underarm",
+    abs: "Mage",
+    oblique: "Skrå mage",
+    lat: "Brede ryggmuskel",
+    trap: "Kappemuskel",
+    quad: "Forside lår",
+    ham: "Bakside lår",
+    glute: "Sete",
+    calf: "Legg",
+  };
+
+  const EXERCISE_HITS = {
+    maskin_brystpress: [["pecs", 1], ["front_delt", 0.45], ["triceps", 0.4]],
+    incline_manualpress: [["pecs", 1], ["front_delt", 0.55], ["triceps", 0.4]],
+    pec_fly_maskin: [["pecs", 1]],
+    benk: [["pecs", 1], ["front_delt", 0.5], ["triceps", 0.45]],
+    gulvpress: [["pecs", 1], ["front_delt", 0.4], ["triceps", 0.55]],
+    incline_biceps: [["biceps", 1], ["forearm", 0.35]],
+    preacher_curl: [["biceps", 1], ["forearm", 0.3]],
+    biceps: [["biceps", 1], ["forearm", 0.35]],
+    triceps_pushdown: [["triceps", 1]],
+    lateral: [["side_delt", 1]],
+    reverse_pec_fly: [["rear_delt", 1]],
+    front_raise: [["front_delt", 1]],
+    skulderpress: [["front_delt", 1], ["side_delt", 0.7], ["triceps", 0.45]],
+    nedtrekk: [["lat", 1], ["biceps", 0.4], ["trap", 0.25]],
+    sittende_roing: [["lat", 1], ["biceps", 0.3], ["trap", 0.2]],
+    roing: [["lat", 1], ["biceps", 0.35]],
+    face_pull: [["rear_delt", 1], ["trap", 0.4]],
+    goblet: [["quad", 1], ["glute", 0.55]],
+    kneboy_kv: [["quad", 1], ["glute", 0.6]],
+    leg_press: [["quad", 1], ["glute", 0.4]],
+    rdl: [["ham", 1], ["glute", 0.55]],
+    leg_curl: [["ham", 1]],
+    hip_thrust: [["glute", 1], ["ham", 0.35]],
+    calf: [["calf", 1]],
+    planke: [["abs", 1], ["oblique", 0.4]],
+  };
+
+  const COARSE_HITS = {
+    bryst: [["pecs", 1], ["front_delt", 0.4], ["triceps", 0.35]],
+    skulder: [["side_delt", 1], ["front_delt", 0.55], ["rear_delt", 0.4]],
+    arm: [["biceps", 1], ["forearm", 0.35]],
+    triceps: [["triceps", 1]],
+    rygg: [["lat", 1], ["trap", 0.4]],
+    bein: [["quad", 1], ["glute", 0.35]],
+    sete: [["glute", 1]],
+    bakside: [["ham", 1], ["glute", 0.4]],
+    legg: [["calf", 1]],
+    kjerne: [["abs", 1], ["oblique", 0.45]],
+  };
+
+  function hitsForExercise(ex) {
+    if (ex && EXERCISE_HITS[ex.id]) return EXERCISE_HITS[ex.id];
+    const coarse = (ex && ex.muscle) || (ex && EXERCISES[ex.id] && EXERCISES[ex.id].muscle) || "";
+    return COARSE_HITS[coarse] || [];
+  }
+
+  function bodyPaint(state, today) {
+    today = today || todayOslo();
+    const score = {};
+    for (const id of Object.keys(MUSCLE_NAMES)) {
+      score[id] = { today: 0, assist: 0, recover: 0, sets: 0, kg: 0, date: "" };
+    }
+    const sess = todaySession((state && state.plan) || {}, today);
+    if (sess && isTrainingDay(sess)) {
+      for (const ex of sess.exercises || []) {
+        for (const [id, w] of hitsForExercise(ex)) {
+          if (!score[id]) continue;
+          if (w >= 0.75) score[id].today = Math.max(score[id].today, w);
+          else score[id].assist = Math.max(score[id].assist, w);
+        }
+      }
+    }
+    const logs = ((state && state.workouts) || []).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    for (const w of logs) {
+      if (!w.completed) continue;
+      const ago = w.date ? daysBetween(today, w.date) : 99;
+      for (const ex of w.exercises || []) {
+        const done = (ex.sets || []).filter((s) => s.done);
+        if (!done.length) continue;
+        const sets = done.length;
+        const kg = done.reduce((m, s) => Math.max(m, Number(s.weight_kg) || 0), 0);
+        for (const [id, weight] of hitsForExercise(ex)) {
+          if (!score[id] || weight < 0.75) continue;
+          if (!score[id].date) {
+            score[id].sets = sets;
+            score[id].kg = kg;
+            score[id].date = w.date || "";
+          }
+          if (ago >= 1 && ago <= 2) score[id].recover = Math.max(score[id].recover, weight);
+        }
+      }
+    }
+    return Object.keys(MUSCLE_NAMES).map((id) => {
+      const row = score[id];
+      let role = "fresh";
+      if (row.today >= 0.75) role = "today";
+      else if (row.assist > 0) role = "assist";
+      else if (row.recover > 0) role = "recovering";
+      return {
+        id, name: MUSCLE_NAMES[id], role,
+        sets: row.sets, kg: row.kg, date: row.date,
+      };
+    });
+  }
+
   function weeklyRings(state) {
     const sum = weeklySummary(state);
     const goal = Math.max(1, sum.planned || ((state && state.profile) || {}).days_per_week || 3);
@@ -1396,10 +1510,12 @@
 
   /* ---------- Min egen plan, overload, PR, 1RM ---------- */
 
-  const MONDAY_TEMPLATE = [
+  const CHEST_TEMPLATE = [
     ["maskin_brystpress", COMPOUND_REST],
     ["incline_manualpress", COMPOUND_REST],
     ["pec_fly_maskin", ISO_REST],
+  ];
+  const ARM_TEMPLATE = [
     ["incline_biceps", ISO_REST],
     ["preacher_curl", ISO_REST],
     ["triceps_pushdown", ISO_REST],
@@ -1407,6 +1523,8 @@
     ["reverse_pec_fly", ISO_REST],
     ["front_raise", ISO_REST],
   ];
+  const CHEST_IDS = CHEST_TEMPLATE.map((row) => row[0]);
+  const ARM_IDS = ARM_TEMPLATE.map((row) => row[0]);
 
   const BALANCE = [
     {
@@ -1451,7 +1569,19 @@
   }
 
   function mondayExercises() {
-    return MONDAY_TEMPLATE.map(([eid, rest]) => fromCatalog(eid, rest));
+    return CHEST_TEMPLATE.map(([eid, rest]) => fromCatalog(eid, rest));
+  }
+
+  function armDayExercises() {
+    return ARM_TEMPLATE.map(([eid, rest]) => fromCatalog(eid, rest));
+  }
+
+  function customSession(weekday, title, blurb, exercises) {
+    const i = DAYS.indexOf(weekday);
+    return {
+      weekday, weekday_short: DAY_SHORT[i], kind: "custom",
+      title, blurb, exercises,
+    };
   }
 
   function emptyDay(weekday) {
@@ -1464,18 +1594,59 @@
   }
 
   function defaultCustomPlan() {
-    const days = DAYS.map((name, i) => {
+    const days = DAYS.map((name) => {
       if (name === "mandag") {
-        return {
-          weekday: name, weekday_short: DAY_SHORT[i], kind: "custom",
-          title: "Bryst, armer og skuldre",
-          blurb: "Din egen økt: først bryst, så armer og skuldre. Sett og hvile kan du justere selv.",
-          exercises: mondayExercises(),
-        };
+        return customSession(name, "Brystdag", "Bare bryst. Tre sett på hver øvelse. Skuldre og armer er en egen dag, og du kan flytte dagene.", mondayExercises());
+      }
+      if (name === "torsdag") {
+        return customSession(name, "Skuldre og armer", "Biceps, triceps og skuldre. Brystet får hvile. Flytt dagen hvis torsdag ikke passer.", armDayExercises());
       }
       return emptyDay(name);
     });
     return { days };
+  }
+
+  function orderExercises(ids, list) {
+    const rank = {};
+    ids.forEach((id, i) => { rank[id] = i; });
+    return list.slice().sort((a, b) => (rank[a.id] ?? 50) - (rank[b.id] ?? 50));
+  }
+
+  function splitLegacyCombo(plan) {
+    if (!plan || !Array.isArray(plan.days)) return false;
+    let changed = false;
+    for (const day of plan.days) {
+      const exs = day.exercises || [];
+      const ids = new Set(exs.map((e) => e && e.id));
+      const chestN = CHEST_IDS.filter((id) => ids.has(id)).length;
+      const armN = ARM_IDS.filter((id) => ids.has(id)).length;
+      if (chestN < 2 || armN < 4) continue;
+      const chest = orderExercises(CHEST_IDS, exs.filter((e) => CHEST_IDS.includes(e.id)));
+      const arms = orderExercises(ARM_IDS, exs.filter((e) => ARM_IDS.includes(e.id)));
+      const rest = exs.filter((e) => e && !CHEST_IDS.includes(e.id) && !ARM_IDS.includes(e.id));
+      day.exercises = chest.concat(rest);
+      day.kind = "custom";
+      day.title = "Brystdag";
+      day.blurb = "Bare bryst. Skuldre og armer ligger på en annen dag, så du kan flytte dagene selv.";
+      let target = plan.days.find((d) => d !== day && d.weekday === "torsdag");
+      if (!target) {
+        target = { weekday: "torsdag", exercises: [] };
+        plan.days.push(target);
+      }
+      const existing = target.exercises || [];
+      const have = new Set(existing.map((e) => e && e.id));
+      const moved = arms.filter((e) => !have.has(e.id));
+      const keptArms = existing.filter((e) => e && ARM_IDS.includes(e.id));
+      const other = existing.filter((e) => e && !ARM_IDS.includes(e.id));
+      target.exercises = orderExercises(ARM_IDS, moved.concat(keptArms)).concat(other);
+      target.kind = "custom";
+      if (!other.length) {
+        target.title = "Skuldre og armer";
+        target.blurb = "Biceps, triceps og skuldre. Flytt dagen hvis torsdag ikke passer.";
+      }
+      changed = true;
+    }
+    return changed;
   }
 
   function slug(name) {
@@ -1774,8 +1945,11 @@
       state.custom_plan = defaultCustomPlan();
     } else {
       const notes = state.custom_plan.notes;
+      const split = splitLegacyCombo(state.custom_plan);
       state.custom_plan = normalizeCustomPlan(state.custom_plan);
       if (notes && notes.length) state.custom_plan.notes = notes;
+      const choseProgram = !!(state.program_id || (state.plan && state.plan.program_id));
+      if (split && !choseProgram) state.plan_source = "custom";
     }
     return state;
   }
@@ -1878,8 +2052,8 @@
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
     todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
     platesFor, achievements, badgeCatalog, weeklySummary, programCatalog, buildProgram, dailyTip, exerciseHistory, interpretAdjust,
-    muscleStatus, weeklyRings, readinessPlan, quickWorkout, xpState,
-    library, mondayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
+    muscleStatus, bodyPaint, weeklyRings, readinessPlan, quickWorkout, xpState,
+    library, mondayExercises, armDayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,
     applyCustomCheckin, balanceSuggestions, progressExtras, fmtKg,

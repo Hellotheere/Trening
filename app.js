@@ -381,6 +381,58 @@
       ${part("M78 146c-2 24 2 48 4 72h18c4-26 0-50-6-72z", "bein")}`;
     return svg;
   }
+  const liveBodies = [];
+  function disposeBodies() {
+    while (liveBodies.length) {
+      const handle = liveBodies.pop();
+      try { handle.dispose(); } catch (e) {}
+    }
+    state.bodyHandle = null;
+  }
+  function queueBody(canvas, opts) {
+    state.pendingBodies = state.pendingBodies || [];
+    state.pendingBodies.push({ canvas, opts });
+  }
+  function flushBodies() {
+    const jobs = state.pendingBodies || [];
+    state.pendingBodies = [];
+    for (const job of jobs) {
+      let handle = null;
+      try {
+        if (globalThis.TrenerBody) handle = TrenerBody.mount(job.canvas, job.opts);
+      } catch (e) { handle = null; }
+      if (handle) {
+        liveBodies.push(handle);
+        if (job.opts && job.opts.full) state.bodyHandle = handle;
+      } else if (job.opts && job.opts.fallback) {
+        job.canvas.replaceWith(job.opts.fallback);
+      }
+    }
+  }
+  function muscleLine(paint) {
+    const today = (paint || []).filter((m) => m.role === "today").map((m) => m.name);
+    const assist = (paint || []).filter((m) => m.role === "assist").map((m) => m.name);
+    const rec = (paint || []).filter((m) => m.role === "recovering").map((m) => m.name);
+    const bits = [];
+    if (today.length) bits.push(today.join(", "));
+    if (assist.length) bits.push("også " + assist.join(", "));
+    if (rec.length) bits.push("henter seg: " + rec.join(", "));
+    return bits.join(" · ") || "Kroppen er frisk";
+  }
+  function muscleDetail(m) {
+    if (!m) return "Dra sidelengs for å snu. Trykk på en muskel for navn og siste sett.";
+    const role = m.role === "today"
+      ? "Hovedmål i dag."
+      : m.role === "assist"
+        ? "Er med på økta, lettere markert."
+        : m.role === "recovering"
+          ? "Henter seg etter siste økt."
+          : "Ikke i dagens økt.";
+    const last = m.sets
+      ? "Sist " + (m.date || "") + ": " + m.sets + " sett" + (m.kg ? ", " + String(m.kg).replace(".", ",") + " kg" : "") + "."
+      : "Ingen logger på denne muskelen ennå.";
+    return m.name + ". " + role + " " + last;
+  }
   function renderStage(d) {
     const rings = d.rings || { sessions: 0, volume: 0, done: 0, goal: 3, consistency: 0 };
     const stage = el("section", { class: "stage" });
@@ -394,9 +446,17 @@
     left.append(el("p", { class: "stage-level" }, "Nivå " + ((d.xp && d.xp.level) || 1) + " · " + (rings.done || 0) + " av " + (rings.goal || 3) + " økter"));
     const side = el("div", { class: "stage-side" });
     side.append(el("div", { class: "map-label" }, "I dag"));
-    side.append(muscleMap(d.muscles));
-    const hot = (d.muscles || []).filter((g) => g.status !== "fresh");
-    side.append(el("p", { class: "map-note" }, hot.length ? hot.map((g) => g.muscle).join(" · ") : "Kroppen er frisk"));
+    const canvas = el("canvas", { class: "stage-body", "aria-label": "Muskelkart i 3D. Åpne for å snu kroppen." });
+    const open = el("button", {
+      class: "body-open", type: "button",
+      onclick: () => { state.view = "body"; state.bodyYaw = 0.28; state.muscleNote = ""; render(); },
+    }, canvas);
+    side.append(open);
+    queueBody(canvas, {
+      paint: d.body, compact: true, yaw: 0.42,
+      fallback: muscleMap(d.muscles),
+    });
+    side.append(el("p", { class: "map-note" }, muscleLine(d.body)));
     stage.append(left, side);
     return stage;
   }
@@ -1342,6 +1402,35 @@
       <path class="limb move" d="M110 56 V120 M110 74 L78 108 M110 74 L142 108 M110 120 L86 230 M110 120 L134 230"/>
     </svg>`;
   }
+  function renderBody() {
+    const d = state.data || {};
+    const paint = d.body || [];
+    const shown = (d.today && d.today.title) || "Kroppen";
+    const wrap = el("div", { class: "wrap solo body-screen" },
+      el("div", { class: "pill" }, "Muskelkart"),
+      el("h1", {}, shown),
+      el("p", { class: "lead" }, "Gul er dagens hovedmål. Lysere gul er med på økta. Oransje henter seg."),
+    );
+    const canvas = el("canvas", { class: "body-canvas", "aria-label": "Mannskropp i 3D. Dra for å rotere, trykk på en muskel." });
+    wrap.append(el("div", { class: "body-stage" }, canvas));
+    const note = el("p", { class: "muscle-readout" }, state.muscleNote || muscleDetail(null));
+    wrap.append(note);
+    wrap.append(el("div", { class: "row" },
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = 0.2; if (state.bodyHandle) state.bodyHandle.setYaw(0.2); } }, "Foran"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.bodyYaw = Math.PI; if (state.bodyHandle) state.bodyHandle.setYaw(Math.PI); } }, "Bak"),
+    ));
+    wrap.append(el("button", { class: "btn", type: "button", style: "margin-top:10px", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
+    queueBody(canvas, {
+      paint, compact: false, full: true, yaw: state.bodyYaw == null ? 0.28 : state.bodyYaw,
+      onYaw: (y) => { state.bodyYaw = y; },
+      onPick: (row) => {
+        state.muscleNote = muscleDetail(row);
+        note.textContent = state.muscleNote;
+      },
+      fallback: muscleMap(d.muscles),
+    });
+    return wrap;
+  }
   function renderDemo() {
     const name = state.detailName || "Øvelse";
     const lib = ((state.data || {}).library || []).find((x) => x.id === state.detailId) || {};
@@ -1514,6 +1603,7 @@
     return wrap;
   }
   function render() {
+    disposeBodies();
     applyTheme();
     app.innerHTML = "";
     const banner = renderUpdate();
@@ -1534,14 +1624,16 @@
     if (state.view === "demo") { app.append(renderDemo()); return; }
     if (state.view === "recap") { app.append(renderRecap()); return; }
     if (state.view === "badges") { app.append(renderBadges()); return; }
-    if (state.view === "ready") { app.append(renderReady()); return; }
-    if (state.view === "fuel") { app.append(renderFuel()); return; }
+    if (state.view === "ready") { app.append(renderReady()); flushBodies(); return; }
+    if (state.view === "fuel") { app.append(renderFuel()); flushBodies(); return; }
+    if (state.view === "body") { app.append(renderBody()); flushBodies(); return; }
     if (state.view === "summary") { app.append(renderSummary()); return; }
     if (state.tab === "okt") app.append(renderWorkout());
     else if (state.tab === "frem") app.append(renderProgress());
     else if (state.tab === "chat") app.append(renderChat());
     else if (state.editing) app.append(renderEditor());
     else app.append(renderPlan());
+    flushBodies();
     if (state.tab === "chat") {
       const box = document.querySelector(".chat");
       if (box) box.scrollTop = box.scrollHeight;

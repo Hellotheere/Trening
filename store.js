@@ -55,7 +55,9 @@
     if (!state || !state.profile) {
       throw new TrenerError("Fant ingen plan på denne enheten. Lag en ny plan så er du i gang.", 404);
     }
-    return T.migrateState(state);
+    T.migrateState(state);
+    save(state);
+    return state;
   }
 
   function issues(fields) {
@@ -137,6 +139,7 @@
       week: T.weeklySummary(Object.assign({}, state, { plan })),
       rings: T.weeklyRings(Object.assign({}, state, { plan })),
       muscles: T.muscleStatus(Object.assign({}, state, { plan })),
+      body: T.bodyPaint(Object.assign({}, state, { plan })),
       xp: T.xpState(state),
       wellness: (state.wellness || []).slice(-14),
       checkins: (state.checkins || []).slice(-8),
@@ -181,7 +184,10 @@
     }
     state.profile = profile;
     state.plan = T.generatePlan(profile, { week: Number((state.plan || {}).week || 1), start: today, logs: state.workouts });
+    const hadSource = !!state.plan_source;
     T.migrateState(state);
+    if (!hadSource) state.plan_source = "custom";
+    if (!state.custom_plan) state.custom_plan = T.defaultCustomPlan();
     save(state);
     try { localStorage.removeItem(LEGACY_TOKEN); } catch {}
     return publicView(state);
