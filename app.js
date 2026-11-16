@@ -445,16 +445,6 @@
     ));
     left.append(el("p", { class: "stage-level" }, "Nivå " + ((d.xp && d.xp.level) || 1) + " · " + (rings.done || 0) + " av " + (rings.goal || 3) + " økter"));
     const side = el("div", { class: "stage-side" });
-    side.append(el("div", { class: "map-label" }, "I dag"));
-    const preview = el("div", { class: "stage-anat" });
-    if (globalThis.TrenerAnatomy) preview.appendChild(TrenerAnatomy.figure("front", d.body));
-    else preview.appendChild(muscleMap(d.muscles));
-    const open = el("button", {
-      class: "body-open", type: "button",
-      "aria-label": "Åpne muskelkartet",
-      onclick: () => { state.view = "body"; state.bodyYaw = 0; state.muscleNote = ""; render(); },
-    }, preview);
-    side.append(open);
     side.append(el("p", { class: "map-note" }, muscleLine(d.body)));
     stage.append(left, side);
     return stage;
@@ -516,11 +506,6 @@
           : "Hvile"),
       );
       head.append(copy);
-      if (isToday && globalThis.TrenerAnatomy) {
-        const mini = el("button", { class: "map-mini", type: "button", "aria-label": "Muskelkart", onclick: (e) => { e.stopPropagation(); state.view = "body"; render(); } });
-        mini.appendChild(TrenerAnatomy.figure("front", d.body));
-        head.append(mini);
-      }
       hero.append(head);
       if (train) {
         hero.append(el("button", { class: "btn start", type: "button", onclick: () => {
@@ -545,6 +530,7 @@
         }
       }
       wrap.append(hero);
+      wrap.append(muscleCard(d, shown));
     }
     wrap.append(el("div", { class: "row quiet" },
       el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "ready"; render(); } }, "Klar-sjekk"),
@@ -1394,32 +1380,57 @@
       <path class="limb move" d="M110 56 V120 M110 74 L78 108 M110 74 L142 108 M110 120 L86 230 M110 120 L134 230"/>
     </svg>`;
   }
-  function renderBody() {
-    const d = state.data || {};
-    const paint = d.body || [];
-    const shown = (d.today && d.today.title) || "Kroppen";
-    const wrap = el("div", { class: "wrap solo body-screen" },
-      el("div", { class: "pill" }, "Muskelkart"),
-      el("h1", {}, shown),
-      el("p", { class: "lead" }, "Gul er dagens hovedmål. Lysere gul er med på økta. Oransje henter seg."),
-    );
-    const note = el("p", { class: "muscle-readout" }, state.muscleNote || "Trykk på en muskel for navn og siste sett.");
+  function dayPaint(d, shown) {
+    if (globalThis.Trener && Trener.bodyPaint && shown && shown.date) {
+      return Trener.bodyPaint({ plan: d.plan, workouts: d.workouts || [] }, shown.date);
+    }
+    return (d && d.body) || [];
+  }
+  function muscleBoard(paint, onPick) {
     const board = el("div", { class: "map-board" });
     for (const [side, label] of [["front", "Foran"], ["back", "Bak"]]) {
       const col = el("div", { class: "map-col" });
       col.append(el("div", { class: "map-kicker" }, label));
       const fig = el("div", { class: "map-fig" });
-      if (globalThis.TrenerAnatomy) {
-        fig.appendChild(TrenerAnatomy.figure(side, paint, (row) => {
-          state.muscleNote = muscleDetail(row);
-          note.textContent = state.muscleNote;
-        }));
-      }
+      if (globalThis.TrenerAnatomy) fig.appendChild(TrenerAnatomy.figure(side, paint, onPick));
       col.append(fig);
       board.append(col);
     }
-    wrap.append(board, note);
-    wrap.append(el("button", { class: "btn", type: "button", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
+    return board;
+  }
+  function muscleLegend() {
+    return el("div", { class: "map-legend" },
+      el("span", {}, el("i", { class: "swatch lime" }), "Mål"),
+      el("span", {}, el("i", { class: "swatch assist" }), "Med"),
+      el("span", {}, el("i", { class: "swatch coral" }), "Henter seg"),
+    );
+  }
+  function muscleCard(d, shown) {
+    const paint = dayPaint(d, shown);
+    const note = el("p", { class: "map-note" }, state.muscleNote || "");
+    const card = el("div", { class: "card map-card" });
+    card.append(
+      muscleBoard(paint, (row) => {
+        state.muscleNote = muscleDetail(row);
+        note.textContent = state.muscleNote;
+      }),
+      muscleLegend(),
+      note,
+    );
+    return card;
+  }
+  function renderBody() {
+    const d = state.data || {};
+    const shown = (d.today && d.today.title) || "Kroppen";
+    const wrap = el("div", { class: "wrap solo body-screen" },
+      el("h1", {}, shown),
+    );
+    const note = el("p", { class: "muscle-readout" }, state.muscleNote || "Trykk på en muskel.");
+    wrap.append(muscleBoard(d.body || [], (row) => {
+      state.muscleNote = muscleDetail(row);
+      note.textContent = state.muscleNote;
+    }), muscleLegend(), note);
+    wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));
     return wrap;
   }
   function renderDemo() {
