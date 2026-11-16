@@ -70,7 +70,7 @@ def main():
             time.sleep(0.35)
             page.screenshot(path=str(OUT / "own-plan-monday.png"), full_page=False)
 
-            page.click("text=Start denne økten")
+            page.locator("button", has_text=re.compile(r"Start")).first.click()
             page.wait_for_selector(".sets")
             # Første øvelse: logg ett sett 12 reps × 40 kg
             reps = page.locator(".set").first.locator("input").nth(0)
@@ -121,7 +121,7 @@ def main():
                 if "Min egen plan" not in (on.inner_text() if on.count() else ""):
                     page.click("text=Min egen plan")
             page.click(".week button:has-text('man')")
-            page.click("text=Start denne økten")
+            page.locator("button", has_text=re.compile(r"Start")).first.click()
             page.wait_for_selector(".sets")
             if page.locator("text=Hopp over hvilen").count():
                 page.click("text=Hopp over hvilen")

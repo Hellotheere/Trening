@@ -135,6 +135,10 @@
       day_marks: state.day_marks || {},
       badges: T.achievements(state),
       week: T.weeklySummary(Object.assign({}, state, { plan })),
+      rings: T.weeklyRings(Object.assign({}, state, { plan })),
+      muscles: T.muscleStatus(Object.assign({}, state, { plan })),
+      xp: T.xpState(state),
+      wellness: (state.wellness || []).slice(-14),
       checkins: (state.checkins || []).slice(-8),
       chat: (state.chat || []).slice(-20),
       workouts: recentWorkouts(state),
@@ -356,7 +360,16 @@
     const plan = custom ? state.custom_plan : state.plan;
     if (!plan || !(plan.days || []).length) return;
     const todayName = T.weekdayName(T.todayOslo());
-    if (adjust.type === "shorten") {
+    if (adjust.type === "quick") {
+      const session = T.quickWorkout(state.profile, adjust.minutes || 20);
+      const day = plan.days.find((d) => d.weekday === todayName) || plan.days.find((d) => (d.exercises || []).length);
+      if (day) {
+        day.title = session.title;
+        day.blurb = session.blurb;
+        day.kind = "custom";
+        day.exercises = session.exercises;
+      }
+    } else if (adjust.type === "shorten") {
       const day = plan.days.find((d) => d.weekday === todayName) || plan.days.find((d) => (d.exercises || []).length);
       if (day) day.exercises = (day.exercises || []).slice(0, adjust.keep || 3);
     } else if (adjust.type === "swap" && T.EXERCISES[adjust.to]) {
@@ -373,6 +386,38 @@
       }
     }
     if (custom) state.custom_plan = T.normalizeCustomPlan(state.custom_plan);
+  }
+
+  function quickDay(body) {
+    const state = requireState();
+    applyAdjust(state, { type: "quick", minutes: Number(body && body.minutes) || 20 });
+    save(state);
+    return publicView(state);
+  }
+
+  function logWellness(body) {
+    const state = requireState();
+    const today = T.todayOslo();
+    const list = [...(state.wellness || [])];
+    let row = list.find((x) => x.date === today);
+    if (!row) { row = { date: today, protein: 0, water: 0 }; list.push(row); }
+    if (body && body.protein) row.protein = Math.max(0, (Number(row.protein) || 0) + Number(body.protein));
+    if (body && body.water) row.water = Math.max(0, (Number(row.water) || 0) + Number(body.water));
+    if (body && body.sleep) row.sleep = Number(body.sleep);
+    if (body && body.energy) row.energy = Number(body.energy);
+    if (body && body.soreness) row.soreness = Number(body.soreness);
+    state.wellness = list.slice(-90);
+    if (body && body.readiness) {
+      const ready = T.readinessPlan(body);
+      state.readiness = Object.assign({}, state.readiness || {}, { [today]: ready });
+      const plan = (state.plan_source === "custom" ? state.custom_plan : state.plan) || {};
+      const day = (plan.days || []).find((d) => d.weekday === T.weekdayName(today));
+      if (day && ready.sets < 3) {
+        day.exercises = (day.exercises || []).map((ex) => Object.assign({}, ex, { sets: ready.sets }));
+      }
+    }
+    save(state);
+    return publicView(state, { readiness: (state.readiness || {})[today] });
   }
 
   function chooseProgram(body) {
@@ -430,7 +475,7 @@
   }
 
   const api = {
-    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay, chooseProgram,
+    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay, chooseProgram, logWellness, quickDay,
     exportJSON, importJSON, reset, publicView, formatError, TrenerError,
   };
   if (typeof globalThis !== "undefined") globalThis.TrenerStore = api;

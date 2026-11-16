@@ -271,4 +271,126 @@ html[data-theme="light"] .hero .title { color: #10140f; }
 html[data-theme="light"] .hero .blurb, html[data-theme="light"] .hero .time { color: #3c463e; }
 html[data-theme="light"] .btn.start { background: #c6ef4a; color: #14200a; box-shadow: 0 8px 0 #8fb82a; }
 html[data-theme="light"] .nav { background: rgba(255,255,255,.9); }
+.stage {
+  display: grid; grid-template-columns: 1.15fr .85fr; gap: 8px; align-items: center;
+  padding: 14px 12px 12px; margin: 0 0 14px; border-radius: 28px;
+  background:
+    radial-gradient(140px 90px at 18% 0%, rgba(214,255,74,.22), transparent 70%),
+    radial-gradient(120px 90px at 100% 80%, rgba(142,203,255,.16), transparent 70%),
+    linear-gradient(165deg, #1a2418 0%, #12161c 62%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 18px 40px rgba(0,0,0,.28);
+  view-transition-name: stage;
+}
+.stage-left { min-width: 0; }
+.ringstack { position: relative; width: 148px; height: 148px; margin: 0 auto; }
+.ringsvg { width: 148px; height: 148px; display: block; filter: drop-shadow(0 8px 16px rgba(214,255,74,.12)); }
+.ringcenter { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ringcenter b { font-size: 28px; letter-spacing: -.04em; line-height: 1; }
+.ringcenter small { color: var(--muted); font-size: 11px; }
+.ring-legend { display: flex; justify-content: center; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--muted); }
+.ring-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.swatch { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.swatch.lime { background: #d6ff4a; }
+.swatch.blue { background: #8ecbff; }
+.swatch.coral { background: #ffb086; }
+.stage-level { margin: 8px 0 0; text-align: center; font-size: 13px; font-weight: 650; }
+.stage-side { display: flex; flex-direction: column; align-items: center; }
+.map-label { font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #d6ff4a; }
+.bodymap { width: 118px; height: 188px; }
+.muscle { fill: #3c463e; }
+.muscle.m-today { fill: #d6ff4a; }
+.muscle.m-recovering { fill: #ffb086; }
+.skin { fill: #d7ddd4; }
+.map-note { margin: 0; font-size: 12px; color: var(--muted); text-align: center; }
+.quick-actions { margin: 0 0 14px; }
+.hero { view-transition-name: session; }
+.hero .title { font-size: 40px; font-weight: 760; letter-spacing: -.05em; }
+.hero.quick {
+  background:
+    radial-gradient(180px 80px at 100% 0%, rgba(214,255,74,.2), transparent 60%),
+    linear-gradient(180deg, #24301c, #1b2330);
+}
+.gen-pill { display: inline-flex; margin-bottom: 8px; padding: 4px 8px; border-radius: 999px; background: rgba(214,255,74,.16); color: #d6ff4a; font-size: 12px; font-weight: 750; }
+.meters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.meter { background: rgba(255,255,255,.04); border-radius: 18px; padding: 12px; }
+.meter span { color: var(--muted); font-size: 12px; font-weight: 700; }
+.meter b { display: block; font-size: 32px; letter-spacing: -.04em; line-height: 1.05; margin-top: 4px; }
+.meter small { color: var(--muted); font-size: 12px; }
+.barline.thick { height: 10px; margin-top: 10px; }
+.tracker-line { font-variant-numeric: tabular-nums; }
+.textlink { margin-top: 8px; border: 0; background: transparent; color: var(--accent); font-weight: 700; min-height: 44px; padding: 0; }
+.ready-screen h1, .fuel h1, .badges-screen h1 { font-size: 40px; }
+.demo-screen h1 { font-size: 32px; line-height: 1.05; }
+.demo-stage {
+  margin: 8px 0 12px; border-radius: 28px; min-height: 280px;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(160px 80px at 50% 0%, rgba(214,255,74,.16), transparent 70%),
+    #141a14;
+}
+.pose { width: min(100%, 240px); height: 260px; }
+.pose .limb { fill: none; stroke: #f4f7f2; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+.pose .load { fill: none; stroke: #d6ff4a; stroke-width: 7; stroke-linecap: round; }
+.pose .ground { fill: none; stroke: rgba(255,255,255,.18); stroke-width: 3; stroke-linecap: round; }
+.pose .move { transform-origin: 110px 120px; animation: pose 1.6s ease-in-out infinite; }
+@keyframes pose { 50% { transform: translateY(8px); } }
+.cues { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.cues li { font-size: 16px; }
+.story {
+  min-height: 100dvh; min-height: 100svh; max-width: 480px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 14px;
+  padding: calc(22px + var(--safe-t)) 20px calc(22px + var(--safe-b));
+  background:
+    radial-gradient(420px 240px at 90% 0%, rgba(214,255,74,.28), transparent 62%),
+    linear-gradient(180deg, #182214 0%, #07090b 68%);
+}
+.story.s1 { background: radial-gradient(420px 240px at 10% 0%, rgba(142,203,255,.32), transparent 60%), linear-gradient(180deg, #121a24, #07090b 70%); }
+.story.s2 { background: radial-gradient(420px 240px at 80% 10%, rgba(255,176,134,.32), transparent 60%), linear-gradient(180deg, #241810, #07090b 70%); }
+.story.s3 { background: radial-gradient(380px 220px at 50% 0%, rgba(214,255,74,.24), transparent 60%), linear-gradient(180deg, #141810, #07090b 72%); }
+.story > .pill, .story > .dots { align-self: flex-start; }
+.story-face { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.story-face .title { font-size: 28px; font-weight: 700; letter-spacing: -.04em; }
+.story-face .num { font-size: 92px; font-weight: 760; letter-spacing: -.07em; line-height: .88; margin-top: 8px; }
+.story-face .unit { color: var(--muted); font-size: 18px; margin-top: 4px; }
+.story-face .blurb { font-size: 18px; color: #e7eee4; margin-top: 16px; }
+.dots { display: flex; gap: 6px; }
+.dots i { width: 28px; height: 4px; border-radius: 99px; background: rgba(255,255,255,.18); }
+.dots i.on { background: #d6ff4a; }
+.badgegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.medal { background: var(--card-solid); border-radius: 22px; padding: 12px; min-height: 108px; }
+.medal h3 { font-size: 16px; margin-top: 8px; }
+.medal p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+.seal { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font-size: 20px; font-weight: 800; }
+.medal.earned .seal { background: #d6ff4a; color: #14200a; }
+.medal.locked { opacity: .55; }
+.medal.locked .seal { background: rgba(255,255,255,.06); color: var(--muted); }
+.challenge, .freeze { margin-bottom: 10px; }
+.challenge h3, .freeze h3 { font-size: 20px; }
+.confetti { height: 72px; position: relative; overflow: visible; }
+.confetti i { position: absolute; top: 24px; width: 8px; height: 14px; border-radius: 2px; background: #d6ff4a; animation: pop .9s ease-out both; }
+.confetti i:nth-child(2) { left: 18%; background: #9fd6ff; animation-delay: .05s; }
+.confetti i:nth-child(3) { left: 36%; background: #ffb086; animation-delay: .1s; }
+.confetti i:nth-child(4) { left: 52%; }
+.confetti i:nth-child(5) { left: 68%; background: #fff; }
+.confetti i:nth-child(6) { left: 84%; background: #9fd6ff; }
+@keyframes pop { from { transform: translateY(8px) rotate(0deg); opacity: 1; } to { transform: translateY(-36px) rotate(18deg); opacity: 1; } }
+html[data-theme="light"] .stage {
+  background:
+    radial-gradient(140px 90px at 18% 0%, rgba(92,138,0,.16), transparent 70%),
+    linear-gradient(165deg, #ffffff, #e7f2d4);
+  box-shadow: 0 10px 30px rgba(0,0,0,.06);
+}
+html[data-theme="light"] .muscle { fill: #d5ddd2; }
+html[data-theme="light"] .muscle.m-today { fill: #5c8a00; }
+html[data-theme="light"] .map-label, html[data-theme="light"] .gen-pill { color: #3f6200; }
+html[data-theme="light"] .demo-stage { background: #f7f8f4; }
+html[data-theme="light"] .pose .limb { stroke: #1c2418; }
+html[data-theme="light"] .pose .load { stroke: #5c8a00; }
+html[data-theme="light"] .story, html[data-theme="light"] .story.s1, html[data-theme="light"] .story.s2, html[data-theme="light"] .story.s3 {
+  background: linear-gradient(180deg, #f7f8f4, #e7f0d8);
+  color: #141814;
+}
+html[data-theme="light"] .story-face .blurb { color: #243024; }
+html[data-theme="light"] .medal.locked .seal { background: rgba(0,0,0,.06); }
+html[data-theme="light"] .meter { background: rgba(0,0,0,.04); }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

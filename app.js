@@ -41,6 +41,8 @@
       else if (path === "swap") data = S.swapDays(body);
       else if (path === "mark") data = S.markDay(body);
       else if (path === "program") data = S.chooseProgram(body);
+      else if (path === "wellness") data = S.logWellness(body);
+      else if (path === "quick") data = S.quickDay(body);
       else throw new Error("Ukjent handling.");
       return data;
     } catch (e) {
@@ -324,6 +326,80 @@
     render();
   }
 
+  function activityRings(rings) {
+    const light = document.documentElement.dataset.theme === "light";
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 160 160");
+    svg.setAttribute("class", "ringsvg");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", (rings.done || 0) + " av " + (rings.goal || 3) + " økter denne uka");
+    const specs = [
+      [66, rings.sessions || 0, "#d6ff4a"],
+      [50, rings.volume || 0, "#8ecbff"],
+      [34, rings.consistency || 0, "#ffb086"],
+    ];
+    let html = "";
+    for (const [r, ratio, color] of specs) {
+      const c = 2 * Math.PI * r;
+      const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+      const off = c * (1 - clamped);
+      html += `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${color}" stroke-opacity="${light ? ".35" : ".28"}" stroke-width="12"/>`;
+      html += `<circle cx="80" cy="80" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" transform="rotate(-90 80 80)"/>`;
+    }
+    svg.innerHTML = html;
+    return el("div", { class: "ringstack" },
+      svg,
+      el("div", { class: "ringcenter" },
+        el("b", {}, String(rings.done || 0)),
+        el("small", {}, "av " + (rings.goal || 3)),
+      ),
+    );
+  }
+  function muscleMap(groups) {
+    const status = (name) => {
+      const g = (groups || []).find((x) => x.muscle === name);
+      return (g && g.status) || "fresh";
+    };
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 140 230");
+    svg.setAttribute("class", "bodymap");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Muskelkart for i dag. Gult er dagens økt, oransje er muskler som henter seg.");
+    const part = (d, muscle) => `<path class="muscle m-${status(muscle)}" d="${d}"/>`;
+    svg.innerHTML = `
+      <ellipse class="skin" cx="70" cy="22" rx="13" ry="15"/>
+      <path class="skin" d="M62 36h16l-2 10H64z"/>
+      ${part("M46 48c-16 2-28 14-26 30 8 2 16-4 20-12 3-8 4-14 6-18z", "skulder")}
+      ${part("M94 48c16 2 28 14 26 30-8 2-16-4-20-12-3-8-4-14-6-18z", "skulder")}
+      ${part("M48 62h44c3 12 1 26-6 36H54c-7-10-9-24-6-36z", "bryst")}
+      ${part("M34 78c-8 10-10 26-4 44 8-2 14-12 16-24 2-10-2-16-12-20z", "rygg")}
+      ${part("M106 78c8 10 10 26 4 44-8-2-14-12-16-24-2-10 2-16 12-20z", "rygg")}
+      ${part("M54 100h32l-2 40H56z", "kjerne")}
+      ${part("M18 76c-10 12-12 30-6 48 7-2 12-10 13-20 2-12-1-22-7-28z", "arm")}
+      ${part("M122 76c10 12 12 30 6 48-7-2-12-10-13-20-2-12 1-22 7-28z", "arm")}
+      ${part("M50 146c-6 22-10 46-6 72h18c2-24 6-48 4-72z", "bein")}
+      ${part("M78 146c-2 24 2 48 4 72h18c4-26 0-50-6-72z", "bein")}`;
+    return svg;
+  }
+  function renderStage(d) {
+    const rings = d.rings || { sessions: 0, volume: 0, done: 0, goal: 3, consistency: 0 };
+    const stage = el("section", { class: "stage" });
+    const left = el("div", { class: "stage-left" });
+    left.append(activityRings(rings));
+    left.append(el("div", { class: "ring-legend" },
+      el("span", {}, el("i", { class: "swatch lime" }), "Økter"),
+      el("span", {}, el("i", { class: "swatch blue" }), "Volum"),
+      el("span", {}, el("i", { class: "swatch coral" }), "Streak"),
+    ));
+    left.append(el("p", { class: "stage-level" }, "Nivå " + ((d.xp && d.xp.level) || 1) + " · " + (rings.done || 0) + " av " + (rings.goal || 3) + " økter"));
+    const side = el("div", { class: "stage-side" });
+    side.append(el("div", { class: "map-label" }, "I dag"));
+    side.append(muscleMap(d.muscles));
+    const hot = (d.muscles || []).filter((g) => g.status !== "fresh");
+    side.append(el("p", { class: "map-note" }, hot.length ? hot.map((g) => g.muscle).join(" · ") : "Kroppen er frisk"));
+    stage.append(left, side);
+    return stage;
+  }
   function renderPlan() {
     const d = state.data;
     const plan = d.plan || {};
@@ -341,6 +417,7 @@
         el("button", { class: "iconbtn", type: "button", "aria-label": "Innstillinger", html: icon("gear"), onclick: () => { state.view = "settings"; render(); } }),
       ),
     ));
+    wrap.append(renderStage(d));
     wrap.append(el("div", { class: "switch" },
       el("button", { class: isCustom() ? "" : "on", type: "button", onclick: () => setSource("generated") }, "Trenerens plan"),
       el("button", { class: isCustom() ? "on" : "", type: "button", onclick: () => setSource("custom") }, "Min egen plan"),
@@ -367,13 +444,15 @@
     if (shown) {
       const isToday = shown.date === isoToday;
       const train = trainingDay(shown);
-      const hero = el("div", { class: "hero" });
+      const quick = train && /minutt/i.test(shown.title || "");
+      const hero = el("div", { class: "hero" + (quick ? " quick" : "") });
       let x0 = 0;
       hero.addEventListener("touchstart", (e) => { x0 = e.changedTouches[0].clientX; }, { passive: true });
       hero.addEventListener("touchend", (e) => {
         const dx = e.changedTouches[0].clientX - x0;
         if (Math.abs(dx) > 50) shiftSelected(dx < 0 ? 1 : -1);
       }, { passive: true });
+      if (quick) hero.append(el("div", { class: "gen-pill" }, "Satt sammen for deg"));
       hero.append(
         el("div", { class: "kicker" }, isToday ? "I dag" : prettyDay(shown.weekday)),
         el("div", { class: "title" }, train ? shown.title : "Hviledag"),
@@ -403,6 +482,11 @@
         }
       }
       wrap.append(hero);
+      wrap.append(renderTracker(d, isoToday, false));
+      wrap.append(el("div", { class: "row quick-actions" },
+        el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "ready"; render(); } }, "Klar-sjekk"),
+        el("button", { class: "btn ghost", type: "button", onclick: () => makeQuick(20) }, "Jeg har 20 min"),
+      ));
       const marks = (d.day_marks || {})[shown.date];
       wrap.append(el("div", { class: "row", style: "margin-bottom:12px" },
         el("button", { class: "btn ghost", type: "button", onclick: () => markShown(shown, marks === "done" ? "" : "done") }, marks === "done" ? "Ferdig" : "Marker ferdig"),
@@ -707,6 +791,7 @@
       if (dx > 0 && w.i > 0) { w.i -= 1; state.rest = null; render(); }
     }, { passive: true });
     wrap.append(el("h1", {}, ex.name));
+    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-bottom:8px", onclick: () => { state.detailId = ex.id; state.detailName = ex.name; state.view = "demo"; render(); } }, "Se løftet"));
     if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, "Forslag: " + String(ex.suggest_kg).replace(".", ",") + " kg"));
     if (ex.hint) wrap.append(el("div", { class: "hint" + (ex.hint_kind === "reduce" || ex.hint_kind === "deload" ? " warn" : "") }, ex.hint));
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
@@ -811,6 +896,7 @@
       ),
     );
     if (s.prs.length) wrap.append(el("div", { class: "card" }, el("h3", {}, "Personlige rekorder"), el("p", {}, s.prs.join(" · "))));
+    if ((s.prs || []).length) wrap.append(el("div", { class: "confetti", "aria-hidden": "true" }, el("i"), el("i"), el("i"), el("i"), el("i"), el("i")));
     wrap.append(el("button", { class: "btn start", type: "button", onclick: () => shareSummary(s) }, "Lagre bilde"));
     wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => { state.view = "app"; state.summary = null; state.workout = null; state.tab = "plan"; render(); } }, "Tilbake til i dag"));
     return wrap;
@@ -839,6 +925,10 @@
       el("h1", {}, "Slik går det"),
       el("p", { class: "lead" }, "Streak, volum og rekorder. Alt ligger bare på denne telefonen."),
     );
+    wrap.append(el("div", { class: "row", style: "margin-bottom:12px" },
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "recap"; state.recap = 0; render(); } }, "Ukesrecap"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "badges"; render(); } }, "Nivå og merker"),
+    ));
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
     const tiles = el("div", { class: "stats" },
@@ -1103,6 +1193,275 @@
     catch (e) { state.err = e.message; }
     render();
   }
+  function proteinTarget(d) {
+    return Math.round(1.8 * ((d && d.profile && d.profile.weight_kg) || 75));
+  }
+  function todayWell(d, iso) {
+    return ((d && d.wellness) || []).find((x) => x.date === iso) || { protein: 0, water: 0 };
+  }
+  function meter(label, value, max, unit) {
+    const ratio = Math.max(0, Math.min(1, max ? value / max : 0));
+    return el("div", { class: "meter" },
+      el("span", {}, label),
+      el("b", {}, String(value)),
+      el("small", {}, "av " + max + " " + unit),
+      el("div", { class: "barline thick" }, el("i", { style: "width:" + Math.round(ratio * 100) + "%" })),
+    );
+  }
+  function renderTracker(d, iso, full) {
+    const wrow = todayWell(d, iso);
+    const pTarget = proteinTarget(d);
+    const card = el("div", { class: "card tracker" + (full ? " tracker-full" : "") });
+    card.append(
+      el("h3", {}, "Protein og vann"),
+      el("p", { class: "muted" }, "Målet følger kroppsvekten, omtrent 1,8 g protein per kg."),
+      el("div", { class: "meters" },
+        meter("Protein", wrow.protein || 0, pTarget, "g"),
+        meter("Vann", wrow.water || 0, 8, "glass"),
+      ),
+      el("p", { class: "tracker-line" }, (wrow.protein || 0) + " / " + pTarget + " g protein · " + (wrow.water || 0) + " / 8 glass"),
+      el("div", { class: "row" },
+        el("button", { class: "btn ghost", type: "button", onclick: () => addWell({ protein: 20 }) }, "+20 g"),
+        el("button", { class: "btn ghost", type: "button", onclick: () => addWell({ protein: 30 }) }, "+30 g"),
+        el("button", { class: "btn ghost", type: "button", onclick: () => addWell({ water: 1 }) }, "+ glass"),
+      ),
+    );
+    if (!full) card.append(el("button", { class: "textlink", type: "button", onclick: () => { state.view = "fuel"; render(); } }, "Hele oversikten"));
+    return card;
+  }
+  function renderFuel() {
+    const d = state.data || {};
+    const wrap = el("div", { class: "wrap solo fuel" },
+      el("div", { class: "pill" }, "I dag"),
+      el("h1", {}, "Fyll på"),
+      el("p", { class: "lead" }, "Raskt inn, så du slipper å tenke på det midt i dagen."),
+    );
+    wrap.append(renderTracker(d, todayIso(), true));
+    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:12px", onclick: () => { state.view = "app"; render(); } }, "Tilbake"));
+    return wrap;
+  }
+  function renderReady() {
+    state.ready = state.ready || { sleep: 3, energy: 3, soreness: 2 };
+    const low = state.ready.sleep <= 2 || state.ready.energy <= 2 || state.ready.soreness >= 4;
+    const wrap = el("div", { class: "wrap solo ready-screen" },
+      el("div", { class: "pill" }, "Før økta"),
+      el("h1", {}, "Klar-sjekk"),
+      el("p", { class: "lead" }, "Søvn, energi og stølhet justerer volumet før du starter."),
+      el("div", { class: low ? "hint warn" : "hint" }, low
+        ? "Lav klarhet. Jeg kutter ett sett og holder vekta rolig."
+        : "Du ser klar ut. Vi kjører planen som den er."),
+    );
+    wrap.append(miniScale("sleep", "Søvn"), miniScale("energy", "Energi"), miniScale("soreness", "Stølhet"));
+    wrap.append(el("button", { class: "btn", type: "button", onclick: () => submitReady() }, "Juster økta"));
+    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => { state.view = "app"; render(); } }, "Tilbake"));
+    return wrap;
+  }
+  function miniScale(key, label) {
+    state.ready = state.ready || { sleep: 3, energy: 3, soreness: 2 };
+    const row = el("div", { class: "scale" });
+    for (let i = 1; i <= 5; i++) {
+      row.append(el("button", { class: state.ready[key] === i ? "on" : "", type: "button", onclick: () => { state.ready[key] = i; render(); } }, String(i)));
+    }
+    return el("div", {}, el("label", {}, label), row);
+  }
+  async function addWell(patch) {
+    try { state.data = await api("wellness", { body: patch }); }
+    catch (e) { state.err = e.message; }
+    render();
+  }
+  async function submitReady() {
+    const r = state.ready || { sleep: 3, energy: 3, soreness: 2 };
+    try {
+      state.data = await api("wellness", { body: Object.assign({ readiness: true }, r) });
+      state.showReady = false;
+      state.view = "app";
+      state.ok = (state.data.readiness && state.data.readiness.note) || "Klar-sjekken er lagret.";
+    } catch (e) { state.err = e.message; }
+    render();
+  }
+  async function makeQuick(minutes) {
+    try {
+      state.data = await api("quick", { body: { minutes } });
+      state.previewDay = null;
+      state.ok = "Økt på " + minutes + " minutter er klar.";
+    } catch (e) { state.err = e.message; }
+    render();
+  }
+  function poseMarkup(id, name) {
+    const key = ((id || "") + " " + (name || "")).toLowerCase();
+    const squat = /goblet|knebøy|kneboy|beinpress|utfall|legg|frontbøy|frontboy|hack/.test(key);
+    const bench = /benk|brystpress|gulvpress|incline|armhev|push/.test(key);
+    const overhead = /skulderpress|pike|press over/.test(key);
+    const row = /roing|face|markløft|markloft|hip|rygg/.test(key);
+    const pull = /nedtrekk|chins|pull|hangende/.test(key);
+    const plank = /planke|kjerne/.test(key);
+    if (squat) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M36 214 H184"/>
+      <path class="limb" d="M72 214 V148"/>
+      <path class="limb move" d="M72 148 H146"/>
+      <path class="limb" d="M146 148 L128 86"/>
+      <circle class="limb" cx="118" cy="68" r="14"/>
+      <path class="limb" d="M136 104 L112 124"/>
+      <circle class="load" cx="104" cy="132" r="15"/>
+    </svg>`;
+    if (bench) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M36 168h150"/>
+      <circle class="limb" cx="58" cy="132" r="13"/>
+      <path class="limb" d="M70 132 H158 M158 132 L186 168 L170 188"/>
+      <path class="limb move" d="M104 132 V86"/>
+      <path class="load" d="M78 86 H138"/>
+    </svg>`;
+    if (overhead) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M40 232h140"/>
+      <circle class="limb" cx="110" cy="78" r="14"/>
+      <path class="limb" d="M110 92 V168 M110 168 L86 230 M110 168 L134 230"/>
+      <path class="limb move" d="M110 108 L86 70 M110 108 L134 70"/>
+      <path class="load" d="M74 62 H146"/>
+    </svg>`;
+    if (row) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M30 228h160"/>
+      <circle class="limb" cx="164" cy="78" r="13"/>
+      <path class="limb" d="M150 88 L108 132 L70 214"/>
+      <path class="limb move" d="M124 112 L124 164"/>
+      <path class="load" d="M100 168 H150"/>
+    </svg>`;
+    if (pull) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="load" d="M46 36 H174"/>
+      <circle class="limb" cx="110" cy="86" r="13"/>
+      <path class="limb move" d="M110 74 L78 42 M110 74 L142 42"/>
+      <path class="limb" d="M110 98 V168 M110 168 L90 214 M110 168 L130 214"/>
+    </svg>`;
+    if (plank) return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M24 176h172"/>
+      <circle class="limb" cx="56" cy="132" r="12"/>
+      <path class="limb move" d="M68 140 H168 L188 176 M92 140 L84 176 M150 140 L158 176"/>
+    </svg>`;
+    return `<svg viewBox="0 0 220 260" class="pose" aria-hidden="true">
+      <path class="ground" d="M36 232h148"/>
+      <circle class="limb" cx="110" cy="42" r="14"/>
+      <path class="limb move" d="M110 56 V120 M110 74 L78 108 M110 74 L142 108 M110 120 L86 230 M110 120 L134 230"/>
+    </svg>`;
+  }
+  function renderDemo() {
+    const name = state.detailName || "Øvelse";
+    const lib = ((state.data || {}).library || []).find((x) => x.id === state.detailId) || {};
+    const steps = String(lib.desc || "Stå stødig. Beveg deg rolig. Kom tilbake med kontroll.").split(/(?<=\.)\s+/).filter(Boolean).slice(0, 3);
+    const wrap = el("div", { class: "wrap solo demo-screen" },
+      el("div", { class: "pill" }, "Slik gjør du det"),
+      el("h1", {}, name),
+    );
+    wrap.append(el("div", { class: "demo-stage", html: poseMarkup(state.detailId, name) }));
+    const cues = el("ol", { class: "cues" });
+    steps.forEach((s) => cues.append(el("li", {}, s)));
+    wrap.append(cues);
+    if (lib.tips) wrap.append(el("div", { class: "tip" }, lib.tips));
+    wrap.append(el("button", { class: "btn", type: "button", style: "margin-top:16px", onclick: () => { state.view = "app"; state.tab = "okt"; render(); } }, "Tilbake til økten"));
+    return wrap;
+  }
+  function weekVolume(workouts, start, end) {
+    let volume = 0;
+    for (const w of workouts || []) {
+      if (!w.completed || !w.date || w.date < start || w.date > end) continue;
+      for (const ex of w.exercises || []) {
+        for (const s of ex.sets || []) if (s.done) volume += (Number(s.reps) || 0) * (Number(s.weight_kg) || 1);
+      }
+    }
+    return Math.round(volume);
+  }
+  function renderRecap() {
+    const d = state.data || {};
+    const week = d.week || {};
+    const start = week.start;
+    let prev = 0;
+    if (start && globalThis.Trener) prev = weekVolume(d.workouts, Trener.addDays(start, -7), Trener.addDays(start, -1));
+    const delta = (week.volume || 0) - prev;
+    const deltaText = prev
+      ? (delta >= 0 ? "+" + delta : String(delta)) + " mot forrige uke."
+      : "Ingen volum forrige uke ennå. Logg en økt, så sammenligner vi.";
+    const best = d.progress && d.progress.one_rm && d.progress.one_rm[0];
+    const cards = [
+      { kicker: "Ukesrecap", title: "Denne uka", num: String(week.done || 0), unit: "av " + (week.planned || 0) + " økter", body: (week.done || 0) + " økter fullført av " + (week.planned || "planen") + "." },
+      { kicker: "Volum", title: "Du flyttet", num: String(week.volume || 0), unit: "i volum", body: deltaText },
+      { kicker: "Sterkeste løft", title: best ? best.name : "Ingen rekord ennå", num: best ? String(best.kg).replace(".", ",") : "–", unit: best ? "kg" : "", body: best ? "Det sterkeste løftet ditt akkurat nå." : "Logg en tung økt, så peker vi på rekorden." },
+      { kicker: "Konsistens", title: "Neste", num: String((d.progress && d.progress.streak) || 0), unit: "dager på rad", body: "Møt opp. Hviledager er en del av streaken." },
+    ];
+    const i = state.recap || 0;
+    const card = cards[i] || cards[0];
+    const dots = el("div", { class: "dots", "aria-hidden": "true" });
+    cards.forEach((_, n) => dots.append(el("i", { class: n === i ? "on" : "" })));
+    const wrap = el("div", { class: "story s" + i });
+    wrap.append(el("div", { class: "pill" }, (i + 1) + " / " + cards.length));
+    wrap.append(dots);
+    wrap.append(el("div", { class: "story-face" },
+      el("div", { class: "kicker" }, card.kicker),
+      el("div", { class: "title" }, card.title),
+      el("div", { class: "num" }, card.num),
+      el("div", { class: "unit" }, card.unit),
+      el("p", { class: "blurb" }, card.body),
+    ));
+    wrap.append(el("div", { class: "row" },
+      el("button", { class: "btn ghost", type: "button", disabled: i === 0, onclick: () => { state.recap = i - 1; render(); } }, "Forrige"),
+      el("button", { class: "btn", type: "button", onclick: () => { if (i < cards.length - 1) { state.recap = i + 1; render(); } else { state.view = "app"; render(); } } }, i < cards.length - 1 ? "Neste kort" : "Ferdig"),
+    ));
+    let x0 = 0;
+    wrap.addEventListener("touchstart", (e) => { x0 = e.changedTouches[0].clientX; }, { passive: true });
+    wrap.addEventListener("touchend", (e) => {
+      const dx = e.changedTouches[0].clientX - x0;
+      if (dx < -40 && i < cards.length - 1) { state.recap = i + 1; render(); }
+      else if (dx > 40 && i > 0) { state.recap = i - 1; render(); }
+    }, { passive: true });
+    return wrap;
+  }
+  async function useFreeze() {
+    const prefs = (state.data && state.data.prefs) || {};
+    const used = prefs.freeze_dates || [];
+    if (used.length >= 1 && (prefs.freezes_left === 0)) return;
+    const y = globalThis.Trener ? Trener.addDays(todayIso(), -1) : todayIso();
+    if (used.includes(y)) return;
+    try {
+      state.data = await api("prefs", { body: { freeze_dates: used.concat(y).slice(-4), freezes_left: 0 } });
+      state.ok = "Streak-frysen er brukt på i går.";
+    } catch (e) { state.err = e.message; }
+    render();
+  }
+  function renderBadges() {
+    const d = state.data || {};
+    const xp = d.xp || { level: 1, into: 0, next: 100, xp: 0 };
+    const catalog = (globalThis.Trener && Trener.badgeCatalog) ? Trener.badgeCatalog(d) : (d.badges || []).map((b) => Object.assign({ earned: true }, b));
+    const rings = d.rings || { done: 0, goal: 3 };
+    const prefs = d.prefs || {};
+    const freezeLeft = prefs.freezes_left === 0 ? 0 : 1;
+    const wrap = el("div", { class: "wrap solo badges-screen" },
+      el("div", { class: "pill" }, "Nivå " + xp.level),
+      el("h1", {}, xp.xp + " XP"),
+      el("p", { class: "lead" }, xp.into + " av " + xp.next + " til neste nivå."),
+      el("div", { class: "barline thick" }, el("i", { style: "width:" + Math.max(4, xp.into) + "%" })),
+    );
+    const grid = el("div", { class: "badgegrid" });
+    for (const b of catalog) {
+      grid.append(el("div", { class: "medal" + (b.earned ? " earned" : " locked") },
+        el("div", { class: "seal", "aria-hidden": "true" }, b.earned ? "★" : "·"),
+        el("h3", {}, b.title),
+        el("p", {}, b.earned ? b.text : "Låst"),
+      ));
+    }
+    wrap.append(grid);
+    wrap.append(el("div", { class: "card challenge" },
+      el("div", { class: "kicker" }, "Ukens utfordring"),
+      el("h3", {}, "Fullfør " + (rings.goal || 3) + " økter"),
+      el("p", {}, (rings.done || 0) + " av " + (rings.goal || 3) + " er logget."),
+      el("div", { class: "barline thick" }, el("i", { style: "width:" + Math.round(100 * Math.min(1, (rings.done || 0) / (rings.goal || 3))) + "%" })),
+    ));
+    wrap.append(el("div", { class: "card freeze" },
+      el("h3", {}, "Streak-frys"),
+      el("p", { class: "muted" }, freezeLeft ? "1 frys klar. Den dekker i går hvis raden ellers ryker." : "Frysen er brukt. En ny kommer når nivået øker."),
+      el("button", { class: "btn ghost", type: "button", disabled: !freezeLeft, onclick: () => useFreeze() }, freezeLeft ? "Bruk frys på i går" : "Ingen frys igjen"),
+    ));
+    if (!catalog.length) wrap.append(el("div", { class: "card" }, el("p", { class: "muted" }, "Fullfør en økt for å åpne det første merket.")));
+    if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
+    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:12px", onclick: () => { state.view = "app"; state.tab = "frem"; state.ok = ""; render(); } }, "Tilbake"));
+    return wrap;
+  }
   function renderPrograms() {
     const wrap = el("div", { class: "wrap" }, el("div", { class: "pill" }, "Programmer"), el("h1", {}, "Velg et opplegg"), el("p", { class: "lead" }, "Loggen din blir med. Hver fjerde uke er en lettere deload-uke."));
     for (const p of (Trener.programCatalog ? Trener.programCatalog() : [])) {
@@ -1172,6 +1531,11 @@
     if (state.view === "library") { app.append(renderLibrary()); return; }
     if (state.view === "programs") { app.append(renderPrograms()); return; }
     if (state.view === "detail") { app.append(renderDetail()); return; }
+    if (state.view === "demo") { app.append(renderDemo()); return; }
+    if (state.view === "recap") { app.append(renderRecap()); return; }
+    if (state.view === "badges") { app.append(renderBadges()); return; }
+    if (state.view === "ready") { app.append(renderReady()); return; }
+    if (state.view === "fuel") { app.append(renderFuel()); return; }
     if (state.view === "summary") { app.append(renderSummary()); return; }
     if (state.tab === "okt") app.append(renderWorkout());
     else if (state.tab === "frem") app.append(renderProgress());

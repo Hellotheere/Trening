@@ -607,10 +607,12 @@
     const planned = {};
     for (const d of ((state.plan || {}).days) || []) planned[d.date] = d;
     const completed = new Set(doneDates);
+    const frozen = new Set((((state.prefs || {}).freeze_dates) || []).filter((d) => typeof d === "string"));
     for (;;) {
       const iso = cursor;
       const kind = (planned[iso] || {}).kind;
       if (completed.has(iso)) streak += 1;
+      else if (frozen.has(iso)) { /* streak-frys: dagen teller ikke imot raden */ }
       else if (kind === "hvile" || (planned[iso] && !(planned[iso].exercises || []).length)) { /* planlagt hvile bryter ikke streaken */ }
       else {
         if (cursor === today) { cursor = addDays(cursor, -1); continue; }
@@ -1165,6 +1167,25 @@
     return badges;
   }
 
+  function badgeCatalog(state) {
+    const earned = new Set(achievements(state).map((b) => b.id));
+    const sum = weeklySummary(state);
+    if (sum.planned && sum.done >= sum.planned) earned.add("uke");
+    if (((state && state.wellness) || []).some((w) => Number(w.protein) >= 100)) earned.add("protein");
+    if (((state && state.workouts) || []).some((w) => /minutt/i.test(w.title || ""))) earned.add("kort");
+    const all = [
+      { id: "forste", title: "Første økt", text: "Du møtte opp." },
+      { id: "fire", title: "Fire økter", text: "Vanen er i gang." },
+      { id: "tolv", title: "Tolv økter", text: "Dette er treningen din nå." },
+      { id: "rekord", title: "Rekordbok", text: "Minst én personlig rekord." },
+      { id: "streak", title: "Tre på rad", text: "Hviledager teller ikke imot deg." },
+      { id: "uke", title: "Hel uke", text: "Alle planlagte økter er logget." },
+      { id: "protein", title: "Proteinmålet", text: "Du nådde proteinet minst én dag." },
+      { id: "kort", title: "Kort og godt", text: "En kort økt teller også." },
+    ];
+    return all.map((b) => Object.assign({ earned: earned.has(b.id) }, b));
+  }
+
   function weeklySummary(state, today) {
     today = today || todayOslo();
     const start = mondayOf(today);
@@ -1220,6 +1241,95 @@
     return { profile: base, plan };
   }
 
+  function muscleStatus(state) {
+    const today = todayOslo();
+    const last = {};
+    for (const w of (state && state.workouts) || []) {
+      if (!w.completed) continue;
+      for (const ex of w.exercises || []) {
+        const m = ex.muscle || (EXERCISES[ex.id] || {}).muscle;
+        if (m && (!last[m] || w.date > last[m])) last[m] = w.date;
+      }
+    }
+    const todayHit = new Set();
+    const sess = todaySession((state && state.plan) || {});
+    for (const ex of (sess && sess.exercises) || []) {
+      const m = ex.muscle || (EXERCISES[ex.id] || {}).muscle;
+      if (m) todayHit.add(m);
+    }
+    const groups = ["bryst", "rygg", "skulder", "bein", "arm", "kjerne"];
+    return groups.map((muscle) => {
+      let status = "fresh";
+      if (todayHit.has(muscle)) status = "today";
+      else if (last[muscle]) {
+        const ago = daysBetween(today, last[muscle]);
+        status = ago <= 1 ? "recovering" : "fresh";
+      }
+      return { muscle, status };
+    });
+  }
+
+  function weeklyRings(state) {
+    const sum = weeklySummary(state);
+    const goal = Math.max(1, sum.planned || ((state && state.profile) || {}).days_per_week || 3);
+    const volGoal = goal * 900;
+    let streak = 0;
+    try { streak = progressStats(state).streak || 0; } catch (e) { streak = 0; }
+    return {
+      sessions: Math.min(1, (sum.done || 0) / goal),
+      volume: Math.min(1, (sum.volume || 0) / volGoal),
+      consistency: Math.min(1, streak / 7),
+      done: sum.done || 0,
+      goal,
+      volumeKg: sum.volume || 0,
+      streak,
+    };
+  }
+
+  function readinessPlan(input) {
+    const sleep = Number(input && input.sleep) || 3;
+    const energy = Number(input && input.energy) || 3;
+    const soreness = Number(input && input.soreness) || 3;
+    const low = sleep <= 2 || energy <= 2 || soreness >= 4;
+    return {
+      factor: low ? 0.8 : 1,
+      sets: low ? 2 : 3,
+      note: low
+        ? "Klarheten er lav. Jeg kutter ett sett og holder vekta rolig, så økta blir bra uten å tømme deg."
+        : "Du er klar. Kjør planen som den er.",
+    };
+  }
+
+  function quickWorkout(profile, minutes) {
+    const mins = Math.max(15, Number(minutes) || 20);
+    const eq = (profile && profile.equipment) || "ingen";
+    const ids = eq === "ingen"
+      ? ["kneboy_kv", "armhev", "glute_bridge", "planke"]
+      : eq === "manualer"
+        ? ["goblet", "gulvpress", "roing", "planke"]
+        : ["goblet", "benk", "nedtrekk", "planke"];
+    const n = mins <= 20 ? 3 : 4;
+    const exercises = ids.filter((id) => EXERCISES[id]).slice(0, n).map((id) => {
+      const ex = fromCatalog(id);
+      ex.sets = 2;
+      return ex;
+    });
+    return {
+      title: mins + " minutter",
+      minutes: mins,
+      blurb: "Kort økt satt sammen ut fra tiden du har og utstyret ditt.",
+      exercises,
+    };
+  }
+
+  function xpState(state) {
+    const done = ((state && state.workouts) || []).filter((w) => w.completed).length;
+    const prs = Object.keys(personalRecords((state && state.workouts) || [])).length;
+    const xp = done * 40 + prs * 25;
+    const level = 1 + Math.floor(xp / 100);
+    return { xp, level, into: xp % 100, next: 100 };
+  }
+
   function dailyTip(state) {
     const plan = (state && state.plan) || {};
     const sess = todaySession(plan);
@@ -1252,6 +1362,14 @@
       return {
         reply: "Jeg tar ut tunge press over hodet og lar skulderen få roligere arbeid, som face pull. Grunnen er at en irritert skulder tåler dårlig å presses. Er smerten skarp, hoven eller stråler ned i armen, skal du ikke trene den – kontakt lege eller fysioterapeut.",
         adjust: { type: "avoid_shoulder" },
+      };
+    }
+    const mins = text.match(/(\d+)\s*min/);
+    if (/har \d+\s*min|bare \d+\s*min|jeg har \d+/.test(text) || (mins && /min/.test(text) && /har|bare|tid/.test(text))) {
+      const minutes = mins ? Number(mins[1]) : 20;
+      return {
+        reply: "Jeg setter sammen en økt på " + minutes + " minutter. Færre øvelser, fordi kort tid skal brukes på de viktigste løftene, ikke på å stresse gjennom alt.",
+        adjust: { type: "quick", minutes },
       };
     }
     if (/kortere|gjør økta kortere|kort ned økta|mindre tid/.test(text)) {
@@ -1650,6 +1768,7 @@
       if (!state.prefs.theme) state.prefs.theme = "system";
     }
     if (!state.day_marks) state.day_marks = {};
+    if (!Array.isArray(state.wellness)) state.wellness = [];
     if (!state.plan_source) state.plan_source = "generated";
     if (!state.custom_plan || !(state.custom_plan.days || []).length) {
       state.custom_plan = defaultCustomPlan();
@@ -1758,7 +1877,8 @@
     TrenerError, todayOslo, mondayOf, weekdayName, addDays, midReps, bumpReps, weekVolume,
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
     todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
-    platesFor, achievements, weeklySummary, programCatalog, buildProgram, dailyTip, exerciseHistory, interpretAdjust,
+    platesFor, achievements, badgeCatalog, weeklySummary, programCatalog, buildProgram, dailyTip, exerciseHistory, interpretAdjust,
+    muscleStatus, weeklyRings, readinessPlan, quickWorkout, xpState,
     library, mondayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,

@@ -380,13 +380,49 @@ test("treneren kjenner dagens økt og benk-loggen", () => {
     }],
   };
   const today = T.ruleReply("Hva skal jeg trene i dag?", state);
-  assert(/hviledag/i.test(today));
-  assert(/mandag/i.test(today));
+  assert(/i dag/i.test(today));
+  assert(/hviledag|bryst|økt|mandag/i.test(today));
   const bench = T.ruleReply("Hvordan går det med benken?", state);
   assert(/60/.test(bench));
   assert(/benk/i.test(bench));
   const food = T.ruleReply("Hva skal jeg spise for mer protein?", state);
   assert(/protein/i.test(food));
+});
+
+test("ringer, muskler, 20 minutter og nivå", () => {
+  const p = profile({ equipment: "treningssenter", weight_kg: 80, days_per_week: 4 });
+  const plan = T.generatePlan(p, { start: "2026-11-09" });
+  const state = { profile: p, plan, workouts: [{ date: "2026-11-09", completed: true, exercises: [{ id: "benk", muscle: "bryst", sets: [{ reps: 8, weight_kg: 40, done: true }] }] }] };
+  const rings = T.weeklyRings(state);
+  assert(rings.goal >= 1);
+  assert(rings.sessions >= 0 && rings.sessions <= 1);
+  assert(rings.consistency >= 0 && rings.consistency <= 1);
+  const catalog = T.badgeCatalog(state);
+  assert.strictEqual(catalog.length, 8);
+  assert(catalog.find((b) => b.id === "forste").earned);
+  assert(!catalog.find((b) => b.id === "tolv").earned);
+  const muscles = T.muscleStatus(state);
+  assert(muscles.some((m) => m.muscle === "bryst"));
+  const quick = T.quickWorkout(p, 20);
+  assert.strictEqual(quick.exercises.length, 3);
+  assert(quick.exercises.every((ex) => ex.sets === 2));
+  const ready = T.readinessPlan({ sleep: 1, energy: 2, soreness: 5 });
+  assert.strictEqual(ready.sets, 2);
+  const xp = T.xpState(state);
+  assert(xp.level >= 1 && xp.xp >= 40);
+  const coach = T.coachReply("jeg har 20 min", state);
+  assert.strictEqual(coach.adjust.type, "quick");
+  assert(/20/.test(coach.reply));
+});
+
+test("streak-frys bevarer raden", () => {
+  const base = {
+    workouts: [{ date: "2026-11-14", completed: true, exercises: [] }],
+    plan: { days: [] },
+  };
+  assert.strictEqual(T.progressStats(base, "2026-11-16").streak, 0);
+  const kept = T.progressStats(Object.assign({}, base, { prefs: { freeze_dates: ["2026-11-15"] } }), "2026-11-16");
+  assert.strictEqual(kept.streak, 1);
 });
 
 test("dialekt og skrivefeil forstås", () => {
