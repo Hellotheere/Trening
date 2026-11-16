@@ -455,9 +455,20 @@
     const shown = selectedSession();
     const isoToday = todayIso();
     const wrap = el("div", { class: "wrap" });
+    const weekInfo = d.week || {};
+    const goal = Math.max(1, weekInfo.planned || ((d.profile || {}).days_per_week) || 3);
+    const weekDone = weekInfo.done || 0;
+    const ring = el("div", { class: "mini-ring", "aria-label": (d.progress && d.progress.streak || 0) + " dager, " + weekDone + " av " + goal + " økter" });
+    const circ = 2 * Math.PI * 15;
+    const off = circ * (1 - Math.min(1, weekDone / goal));
+    ring.innerHTML = `<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="track" cx="20" cy="20" r="15"/><circle class="arc" cx="20" cy="20" r="15" stroke-dasharray="${circ.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}"/></svg>`;
+    ring.append(el("b", {}, String((d.progress && d.progress.streak) || 0)));
     wrap.append(el("div", { class: "top" },
       el("p", { class: "dateline" }, greeting() + (name ? ", " + name : "")),
-      el("button", { class: "iconbtn", type: "button", "aria-label": "Innstillinger", html: icon("gear"), onclick: () => { state.view = "settings"; render(); } }),
+      el("div", { class: "top-side" },
+        ring,
+        el("button", { class: "iconbtn", type: "button", "aria-label": "Innstillinger", html: icon("gear"), onclick: () => { state.view = "settings"; render(); } }),
+      ),
     ));
     if ((d.active_workout || {}).exercises) {
       wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-bottom:12px", onclick: () => resumeWorkout() }, "Fortsett økten"));
@@ -704,7 +715,7 @@
         }
         return { ...ex, log };
       }),
-      i: 0, completed: !!(existing && existing.completed),
+      i: 0, completed: !!(existing && existing.completed), t0: Date.now(),
     };
     state.rest = null;
   }
@@ -727,7 +738,8 @@
       }
       if (best && ex.pr_kg && best > Number(ex.pr_kg)) prs.push(ex.name + " " + String(best).replace(".", ",") + " kg");
     }
-    return { volume: Math.round(volume), sets, prs, title: w.title };
+    const mins = w.t0 ? Math.max(1, Math.round((Date.now() - w.t0) / 60000)) : 0;
+    return { volume: Math.round(volume), sets, prs, title: w.title, minutes: mins };
   }
   async function saveWorkout(complete) {
     const w = state.workout;
@@ -744,7 +756,7 @@
             rpe: s.rpe === "" || s.rpe == null ? null : Number(s.rpe),
           })),
         })),
-        draft: complete ? null : { date: w.date, title: w.title, i: w.i, exercises: w.exercises },
+        draft: complete ? null : { date: w.date, title: w.title, i: w.i, t0: w.t0 || Date.now(), exercises: w.exercises },
       }});
       if (complete) {
         w.completed = true;
@@ -816,10 +828,12 @@
       return wrap;
     }
     const ex = w.exercises[w.i] || w.exercises[0];
+    const pct = Math.round(((w.i + 1) / Math.max(1, w.exercises.length)) * 100);
     wrap.append(el("div", { class: "workout-top" },
       el("span", { class: "muted" }, (w.i + 1) + " / " + w.exercises.length),
       el("button", { class: "iconbtn", type: "button", "aria-label": "Lukk", onclick: () => { state.tab = "plan"; state.rest = null; render(); } }, "✕"),
     ));
+    wrap.append(el("div", { class: "progress-line", role: "progressbar", "aria-valuenow": String(pct), "aria-label": "Økt" }, el("i", { style: "width:" + pct + "%" })));
     let sx = 0;
     wrap.addEventListener("touchstart", (e) => { sx = e.changedTouches[0].clientX; }, { passive: true });
     wrap.addEventListener("touchend", (e) => {
@@ -831,21 +845,35 @@
     wrap.append(el("h1", {}, ex.name));
     if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, String(ex.suggest_kg).replace(".", ",") + " kg"));
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
-    if (state.rest && state.rest.left > 0) {
+    const resting = state.rest && state.rest.left > 0;
+    if (resting) {
       const c = 2 * Math.PI * 78;
       const off = c * (1 - state.rest.left / state.rest.total);
       const t = el("div", { class: "timer" });
       t.innerHTML = `<svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="78"/><circle class="fg" cx="100" cy="100" r="78" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
       t.append(el("div", { class: "time" }, fmtTime(state.rest.left)));
-      wrap.append(el("div", { class: "timer-wrap" }, t));
-      wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { clearInterval(state.rest.t); state.rest = null; render(); } }, "Hopp over hvilen"));
+      const stage = el("div", { class: "rest-screen" }, el("p", { class: "kicker" }, "Hvile"), t);
+      stage.append(el("div", { class: "rest-actions" },
+        el("button", { class: "btn ghost", type: "button", onclick: () => { clearInterval(state.rest.t); state.rest = null; render(); } }, "Hopp over hvilen"),
+        el("button", { class: "btn ghost", type: "button", onclick: () => {
+          state.rest.until += 30000;
+          state.rest.total += 30;
+          state.rest.left = restLeft();
+          render();
+        } }, "+30 s"),
+      ));
+      wrap.append(stage);
     }
 
     const sets = el("div", { class: "sets" });
     const current = ex.log.findIndex((s) => !s.done);
-    ex.log.forEach((s, i) => {
+    if (!resting) ex.log.forEach((s, i) => {
       const key = (ex.id || ex.name) + ":" + i;
-      const row = el("div", { class: "set" + (i === current ? " now" : "") + (s.done ? " done" : "") }, el("div", { class: "n" }, "Sett " + (i + 1)));
+      const kind = s.done ? "done" : (i === current ? "now" : "later");
+      const row = el("div", { class: "set " + kind });
+      const dose = (s.reps != null && s.reps !== "" ? s.reps : "–") + (s.weight_kg != null && s.weight_kg !== "" ? " × " + String(s.weight_kg).replace(".", ",") : "");
+      row.append(el("div", { class: "n" }, "Sett " + (i + 1)));
+      if (kind !== "now") row.append(el("b", { class: "dose" }, dose));
       const stepper = (value, label, step, onChange) => {
         const box = el("div", { class: "stepper" }, el("span", {}, label));
         const input = el("input", { type: "number", inputmode: "decimal", value: value === "" || value == null ? "" : value, "aria-label": label });
@@ -855,18 +883,17 @@
           const next = Math.max(0, Math.round((cur + dir * step) * 10) / 10);
           input.value = String(next); onChange(next);
         };
-        const controls = el("div", { class: "stepper-row" },
+        box.append(el("div", { class: "stepper-row" },
           el("button", { class: "step", type: "button", "aria-label": "Mindre", onclick: () => bump(-1) }, "−"),
           input,
           el("button", { class: "step", type: "button", "aria-label": "Mer", onclick: () => bump(1) }, "+"),
-        );
-        box.append(controls);
+        ));
         return box;
       };
-      row.append(
-        stepper(s.reps, "Reps", 1, (v) => { s.reps = v; }),
-        stepper(s.weight_kg, "Kg", 2.5, (v) => { s.weight_kg = v; }),
-      );
+      const repsBox = stepper(s.reps, "Reps", 1, (v) => { s.reps = v; });
+      const kgBox = stepper(s.weight_kg, "Kg", 2.5, (v) => { s.weight_kg = v; });
+      if (kind === "now") row.append(el("div", { class: "steppers" }, repsBox, kgBox));
+      else row.append(repsBox, kgBox);
       row.append(el("button", {
         class: "tick" + (s.done ? " on" : "") + (state.justChecked === key ? " pop" : ""),
         type: "button",
@@ -878,10 +905,19 @@
           else render();
           saveWorkout(false);
         },
-      }, s.done ? "✓" : ""));
+      }, "✓"));
       sets.append(row);
     });
-    wrap.append(sets);
+    if (!resting) wrap.append(sets);
+    if (resting) {
+      if (state.swap) wrap.append(librarySheet((item) => {
+        const cur = w.exercises[w.i];
+        cur.id = item.id; cur.name = item.name; cur.desc = item.desc; cur.tips = item.tips; cur.muscle = item.muscle;
+        cur.rest_sec = item.default_rest_sec || cur.rest_sec;
+        state.swap = false; render();
+      }, ""));
+      return wrap;
+    }
     const more = el("details", { class: "more" });
     more.append(el("summary", {}, "…"));
     more.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.detailId = ex.id; state.detailName = ex.name; state.view = "demo"; render(); } }, "Se løftet"));
@@ -930,14 +966,18 @@
   }
 
   function renderSummary() {
-    const s = state.summary || { volume: 0, sets: 0, prs: [], title: "Økt" };
-    const wrap = el("div", { class: "wrap solo celebrate" },
+    const s = state.summary || { volume: 0, sets: 0, prs: [], title: "Økt", minutes: 0 };
+    const card = el("div", { class: "share-card" },
       el("p", { class: "kicker" }, "Ferdig"),
       el("h1", {}, s.title || "Økt"),
-      el("p", { class: "big-num" }, String(s.sets)),
-      el("p", { class: "muted" }, "sett · " + s.volume + " kg"),
+      el("div", { class: "share-grid" },
+        el("div", {}, el("b", {}, String(s.volume)), el("span", {}, "kg")),
+        el("div", {}, el("b", {}, String(s.minutes || s.sets)), el("span", {}, s.minutes ? "min" : "sett")),
+        el("div", {}, el("b", {}, String(s.prs.length)), el("span", {}, "rekorder")),
+      ),
     );
-    if (s.prs.length) wrap.append(el("p", { class: "pr-line" }, s.prs[0]));
+    if (s.prs.length) card.append(el("p", { class: "pr-line" }, s.prs.join(" · ")));
+    const wrap = el("div", { class: "wrap solo celebrate" }, card);
     wrap.append(el("button", { class: "btn", type: "button", onclick: () => { state.view = "app"; state.summary = null; state.workout = null; state.tab = "plan"; render(); } }, "Ferdig"));
     wrap.append(el("button", { class: "textlink", type: "button", onclick: () => shareSummary(s) }, "Lagre bilde"));
     return wrap;
@@ -961,21 +1001,46 @@
   function renderProgress() {
     const d = state.data;
     const p = d.progress || {};
+    const done = new Set(((d.workouts || []).filter((w) => w.completed).map((w) => w.date)));
+    const start = addDays(todayIso(), -16 * 7 + 1);
+    const counts = [];
+    for (let wi = 0; wi < 16; wi++) {
+      let n = 0;
+      for (let day = 0; day < 7; day++) if (done.has(addDays(start, wi * 7 + day))) n += 1;
+      counts.push(n);
+    }
+    const prev = counts.length > 1 ? counts[counts.length - 2] : 0;
+    const cur = counts.length ? counts[counts.length - 1] : 0;
+    const trend = cur > prev ? "up" : cur < prev ? "down" : "flat";
+    const arrow = trend === "up" ? "↑" : trend === "down" ? "↓" : "–";
     const wrap = el("div", { class: "wrap" },
-      el("p", { class: "big-num" }, String(p.streak || 0)),
+      el("div", { class: "hero-line" },
+        el("p", { class: "big-num" }, String(p.streak || 0)),
+        el("span", { class: "trend " + trend, "aria-label": trend === "up" ? "Opp" : trend === "down" ? "Ned" : "Uendret" }, arrow),
+      ),
       el("p", { class: "muted" }, "dager på rad"),
     );
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
-    const done = new Set(((d.workouts || []).filter((w) => w.completed).map((w) => w.date)));
-    const start = addDays(todayIso(), -16 * 7 + 1);
-    const counts = [];
-    for (let w = 0; w < 16; w++) {
-      let n = 0;
-      for (let day = 0; day < 7; day++) if (done.has(addDays(start, w * 7 + day))) n += 1;
-      counts.push(n);
-    }
     wrap.append(svgChart(counts, "#d6ff4a", true));
+    const weekEx = [];
+    const wk = d.week || {};
+    for (const w of d.workouts || []) {
+      if (!w.completed || !w.date) continue;
+      if (wk.start && w.date < wk.start) continue;
+      if (wk.end && w.date > wk.end) continue;
+      for (const ex of w.exercises || []) {
+        if ((ex.sets || []).some((s) => s.done)) weekEx.push(ex);
+      }
+    }
+    let weekPaint = [];
+    if (weekEx.length && globalThis.Trener && Trener.bodyPaint) {
+      const iso = todayIso();
+      weekPaint = Trener.bodyPaint({ plan: { days: [{ date: iso, exercises: weekEx }] }, workouts: [] }, iso);
+    }
+    const weekMap = el("div", { class: "map-card week-map" }, el("p", { class: "kicker" }, "Uken"));
+    weekMap.append(muscleBoard(weekPaint, () => {}));
+    wrap.append(weekMap);
     const more = el("details", { class: "more" });
     more.append(el("summary", {}, "Mer"));
     more.append(el("div", { class: "row" },
@@ -1045,9 +1110,9 @@
       const p2 = pts[i + 1];
       const p3 = pts[Math.min(pts.length - 1, i + 2)];
       const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-      const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c1y = Math.max(12, Math.min(118, p1[1] + (p2[1] - p0[1]) / 6));
       const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-      const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      const c2y = Math.max(12, Math.min(118, p2[1] - (p3[1] - p1[1]) / 6));
       d += " C " + c1x + " " + c1y + ", " + c2x + " " + c2y + ", " + p2[0] + " " + p2[1];
     }
     return d;
@@ -1135,6 +1200,11 @@
     if (state.typing) chat.append(el("div", { class: "bubble coach" }, el("span", { class: "typing" }, el("i"), el("i"), el("i"))));
     wrap.append(chat);
     const dock = el("div", { class: "composer" });
+    const chips = el("div", { class: "chips" });
+    for (const [label, q] of [["I dag", "Hva skal jeg trene i dag?"], ["Teknikk", "Hvordan gjør jeg knebøy?"], ["Mat", "Hva gjør jeg om mat?"]]) {
+      chips.append(el("button", { class: "chip", type: "button", onclick: () => sendChat(q) }, label));
+    }
+    dock.append(chips);
     const ta = el("textarea", { placeholder: "Skriv…", rows: "1" }, state.chatDraft || "");
     ta.addEventListener("input", (e) => { state.chatDraft = e.target.value; });
     ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChat(); } });

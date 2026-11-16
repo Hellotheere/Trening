@@ -98,13 +98,18 @@
       <radialGradient id="${uid}-fresh" cx="38%" cy="16%" r="88%">
         <stop offset="0" stop-color="#9098a1"/><stop offset="1" stop-color="#4e565e"/>
       </radialGradient>
-      <filter id="${uid}-glow" x="-45%" y="-45%" width="190%" height="190%">
-        <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="blur"/>
-        <feFlood flood-color="#d6ff4a" flood-opacity=".42" result="color"/>
+      <filter id="${uid}-glow" x="-55%" y="-55%" width="210%" height="210%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="18" result="blur"/>
+        <feFlood flood-color="#e7ff7a" flood-opacity=".48" result="color"/>
         <feComposite in="color" in2="blur" operator="in" result="halo"/>
+        <feFlood flood-color="#ffffff" flood-opacity=".72" result="white"/>
+        <feComposite in="white" in2="SourceAlpha" operator="in" result="clip"/>
+        <feGaussianBlur in="SourceAlpha" stdDeviation="7" result="ib"/>
+        <feComposite in="clip" in2="ib" operator="out" result="inner"/>
         <feMerge>
           <feMergeNode in="halo"/>
           <feMergeNode in="SourceGraphic"/>
+          <feMergeNode in="inner"/>
         </feMerge>
       </filter>`;
     svg.appendChild(defs);
@@ -122,8 +127,8 @@
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         poly.setAttribute("points", points);
         poly.setAttribute("fill", fill[info.role] || fill.fresh);
-        poly.setAttribute("stroke", info.role === "today" ? "rgba(255,252,220,.4)" : info.role === "base" ? "none" : "rgba(8,10,12,.42)");
-        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "2");
+        poly.setAttribute("stroke", info.role === "today" ? "rgba(255,252,214,.72)" : info.role === "base" ? "none" : "rgba(255,255,255,.16)");
+        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "1.6");
         poly.setAttribute("stroke-linejoin", "round");
         if (info.role === "today") poly.setAttribute("filter", "url(#" + uid + "-glow)");
         if (info.role !== "base") {
