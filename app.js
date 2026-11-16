@@ -94,7 +94,6 @@
   function tap(ms) {
     try {
       if (navigator.vibrate) navigator.vibrate(ms || 12);
-      else document.documentElement.classList.add("tap");
     } catch {}
   }
   let wakeLock = null;
@@ -776,25 +775,29 @@
     if (state.rest && state.rest.t) clearInterval(state.rest.t);
     const prefs = ((state.data || {}).prefs) || {};
     const total = Math.max(10, sec || prefs.rest_sec || 60);
-    tap(18);
     state.rest = { until: Date.now() + total * 1000, total, left: total, t: setInterval(() => {
       if (!state.rest) return;
       state.rest.left = restLeft();
       if (state.rest.left <= 0) {
-        clearInterval(state.rest.t); state.rest.left = 0;
+        clearInterval(state.rest.t);
+        state.rest.left = 0;
         if (((state.data || {}).prefs || {}).sound !== false) beep();
-        try { if (navigator.vibrate) navigator.vibrate([160, 60, 160]); } catch {}
+        try { if (navigator.vibrate) navigator.vibrate([16, 40, 16]); } catch {}
         const w = state.workout;
         const ex = w && w.exercises[w.i];
         if (ex && (ex.log || []).length && ex.log.every((s) => s.done) && w.i < w.exercises.length - 1) {
-          w.i += 1; state.rest = null;
+          w.i += 1;
+          state.rest = null;
+          render();
+          return;
         }
       }
+      if (!state.rest) return;
       const node = document.querySelector(".timer .time");
       const fg = document.querySelector(".timer .fg");
       if (node) node.textContent = fmtTime(state.rest.left);
       if (fg) {
-        const c = 2 * Math.PI * 86;
+        const c = 2 * Math.PI * 78;
         fg.style.strokeDashoffset = String(c * (1 - state.rest.left / state.rest.total));
       }
     }, 1000) };
@@ -829,24 +832,25 @@
     if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, String(ex.suggest_kg).replace(".", ",") + " kg"));
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.rest && state.rest.left > 0) {
-      const c = 2 * Math.PI * 86;
+      const c = 2 * Math.PI * 78;
       const off = c * (1 - state.rest.left / state.rest.total);
       const t = el("div", { class: "timer" });
-      t.innerHTML = `<svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="86"/><circle class="fg" cx="100" cy="100" r="86" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
+      t.innerHTML = `<svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="78"/><circle class="fg" cx="100" cy="100" r="78" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
       t.append(el("div", { class: "time" }, fmtTime(state.rest.left)));
       wrap.append(el("div", { class: "timer-wrap" }, t));
       wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { clearInterval(state.rest.t); state.rest = null; render(); } }, "Hopp over hvilen"));
     }
 
     const sets = el("div", { class: "sets" });
+    const current = ex.log.findIndex((s) => !s.done);
     ex.log.forEach((s, i) => {
-      const row = el("div", { class: "set" }, el("div", { class: "n" }, "Sett " + (i + 1)));
+      const key = (ex.id || ex.name) + ":" + i;
+      const row = el("div", { class: "set" + (i === current ? " now" : "") + (s.done ? " done" : "") }, el("div", { class: "n" }, "Sett " + (i + 1)));
       const stepper = (value, label, step, onChange) => {
         const box = el("div", { class: "stepper" }, el("span", {}, label));
         const input = el("input", { type: "number", inputmode: "decimal", value: value === "" || value == null ? "" : value, "aria-label": label });
         input.addEventListener("input", (e) => onChange(e.target.value));
         const bump = (dir) => {
-          tap(8);
           const cur = Number(String(input.value || "0").replace(",", ".")) || 0;
           const next = Math.max(0, Math.round((cur + dir * step) * 10) / 10);
           input.value = String(next); onChange(next);
@@ -863,12 +867,18 @@
         stepper(s.reps, "Reps", 1, (v) => { s.reps = v; }),
         stepper(s.weight_kg, "Kg", 2.5, (v) => { s.weight_kg = v; }),
       );
-      row.append(el("button", { class: "tick" + (s.done ? " on" : ""), type: "button", "aria-label": "Sett ferdig", onclick: () => {
-        s.done = !s.done; tap(14);
-        if (s.done && ex.rest_sec) startRest(ex.rest_sec);
-        else render();
-        saveWorkout(false);
-      } }, s.done ? "✓" : "○"));
+      row.append(el("button", {
+        class: "tick" + (s.done ? " on" : "") + (state.justChecked === key ? " pop" : ""),
+        type: "button",
+        "aria-label": "Sett ferdig",
+        onclick: () => {
+          s.done = !s.done;
+          state.justChecked = s.done ? key : "";
+          if (s.done && ex.rest_sec) startRest(ex.rest_sec);
+          else render();
+          saveWorkout(false);
+        },
+      }, s.done ? "✓" : ""));
       sets.append(row);
     });
     wrap.append(sets);
@@ -922,18 +932,14 @@
   function renderSummary() {
     const s = state.summary || { volume: 0, sets: 0, prs: [], title: "Økt" };
     const wrap = el("div", { class: "wrap solo celebrate" },
-      el("div", { class: "pill" }, "Ferdig"),
-      el("h1", {}, s.prs.length ? "Ny rekord." : "Sterkt."),
-      el("p", { class: "lead" }, s.title || "Økten er logget."),
-      el("div", { class: "statgrid" },
-        el("div", { class: "stat" }, el("b", {}, String(s.volume)), el("span", {}, "Volum, kg")),
-        el("div", { class: "stat" }, el("b", {}, String(s.sets)), el("span", {}, "Sett logget")),
-      ),
+      el("p", { class: "kicker" }, "Ferdig"),
+      el("h1", {}, s.title || "Økt"),
+      el("p", { class: "big-num" }, String(s.sets)),
+      el("p", { class: "muted" }, "sett · " + s.volume + " kg"),
     );
-    if (s.prs.length) wrap.append(el("div", { class: "card" }, el("h3", {}, "Personlige rekorder"), el("p", {}, s.prs.join(" · "))));
-    if ((s.prs || []).length) wrap.append(el("div", { class: "confetti", "aria-hidden": "true" }, el("i"), el("i"), el("i"), el("i"), el("i"), el("i")));
-    wrap.append(el("button", { class: "btn start", type: "button", onclick: () => shareSummary(s) }, "Lagre bilde"));
-    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => { state.view = "app"; state.summary = null; state.workout = null; state.tab = "plan"; render(); } }, "Tilbake til i dag"));
+    if (s.prs.length) wrap.append(el("p", { class: "pr-line" }, s.prs[0]));
+    wrap.append(el("button", { class: "btn", type: "button", onclick: () => { state.view = "app"; state.summary = null; state.workout = null; state.tab = "plan"; render(); } }, "Ferdig"));
+    wrap.append(el("button", { class: "textlink", type: "button", onclick: () => shareSummary(s) }, "Lagre bilde"));
     return wrap;
   }
   function shareSummary(s) {
@@ -962,16 +968,14 @@
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
     const done = new Set(((d.workouts || []).filter((w) => w.completed).map((w) => w.date)));
-    const heat = el("div", { class: "heat-plain" });
-    const grid = el("div", { class: "heat" });
     const start = addDays(todayIso(), -16 * 7 + 1);
-    for (let i = 0; i < 16 * 7; i++) {
-      const iso = addDays(start, i);
-      const on = done.has(iso);
-      grid.append(el("i", { class: on ? "on3" : "", title: iso }));
+    const counts = [];
+    for (let w = 0; w < 16; w++) {
+      let n = 0;
+      for (let day = 0; day < 7; day++) if (done.has(addDays(start, w * 7 + day))) n += 1;
+      counts.push(n);
     }
-    heat.append(grid);
-    wrap.append(heat);
+    wrap.append(svgChart(counts, "#d6ff4a", true));
     const more = el("details", { class: "more" });
     more.append(el("summary", {}, "Mer"));
     more.append(el("div", { class: "row" },
@@ -1031,39 +1035,66 @@
     const dt = new Date(Date.UTC(y, m - 1, d + n));
     return dt.getUTCFullYear() + "-" + String(dt.getUTCMonth() + 1).padStart(2, "0") + "-" + String(dt.getUTCDate()).padStart(2, "0");
   }
-  function svgChart(vals, color) {
+  let chartN = 0;
+  function smoothPath(pts) {
+    if (pts.length < 2) return "";
+    let d = "M " + pts[0][0] + " " + pts[0][1];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+      const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+      const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      d += " C " + c1x + " " + c1y + ", " + c2x + " " + c2y + ", " + p2[0] + " " + p2[1];
+    }
+    return d;
+  }
+  function svgChart(vals, color, bare) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    svg.setAttribute("class", "chart"); svg.setAttribute("viewBox", "0 0 320 140");
+    const uid = "ch" + (++chartN);
+    svg.setAttribute("class", "chart" + (bare ? " spark" : ""));
+    svg.setAttribute("viewBox", "0 0 320 140");
     if (!vals.length) return svg;
     const lo = Math.min(...vals), hi = Math.max(...vals);
-    const span = (hi - lo) || Math.max(hi, 1);
-    const base = hi === lo ? 0 : lo;
+    const span = (hi - lo) || 1;
     const pts = vals.map((v, i) => {
-      const x = vals.length === 1 ? 48 : 12 + i * (296 / (vals.length - 1));
-      const y = 118 - ((v - base) / (hi === lo ? Math.max(v, 1) : span)) * 90;
+      const x = vals.length === 1 ? 160 : 8 + i * (304 / (vals.length - 1));
+      const y = hi === lo ? (lo <= 0 ? 118 : 70) : 16 + (1 - (v - lo) / span) * 100;
       return [x, y];
     });
+    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    defs.innerHTML = `<linearGradient id="${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${color}" stop-opacity=".28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient>`;
+    svg.append(defs);
     if (vals.length === 1) {
       const bar = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bar.setAttribute("x", "36"); bar.setAttribute("width", "28"); bar.setAttribute("rx", "8");
+      bar.setAttribute("x", "146"); bar.setAttribute("width", "28"); bar.setAttribute("rx", "8");
       bar.setAttribute("y", String(pts[0][1])); bar.setAttribute("height", String(Math.max(8, 124 - pts[0][1])));
       bar.setAttribute("fill", color);
       svg.append(bar);
       return svg;
     }
-    const area = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    area.setAttribute("fill", color); area.setAttribute("opacity", "0.16");
-    area.setAttribute("points", pts.map((p) => p.join(",")).join(" ") + " " + pts[pts.length - 1][0] + ",128 " + pts[0][0] + ",128");
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    line.setAttribute("fill", "none"); line.setAttribute("stroke", color); line.setAttribute("stroke-width", "3");
-    line.setAttribute("stroke-linecap", "round"); line.setAttribute("stroke-linejoin", "round");
-    line.setAttribute("points", pts.map((p) => p.join(",")).join(" "));
-    svg.append(area, line);
-    pts.forEach(([x, y]) => {
-      const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-      c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", vals.length < 3 ? "6" : "4"); c.setAttribute("fill", color);
-      svg.append(c);
-    });
+    const line = smoothPath(pts);
+    const area = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    area.setAttribute("d", line + " L " + pts[pts.length - 1][0] + " 132 L " + pts[0][0] + " 132 Z");
+    area.setAttribute("fill", "url(#" + uid + ")");
+    const stroke = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    stroke.setAttribute("d", line);
+    stroke.setAttribute("fill", "none");
+    stroke.setAttribute("stroke", color);
+    stroke.setAttribute("stroke-width", bare ? "2.5" : "3");
+    stroke.setAttribute("stroke-linecap", "round");
+    stroke.setAttribute("stroke-linejoin", "round");
+    svg.append(area, stroke);
+    if (!bare && vals.length <= 8) {
+      pts.forEach(([x, y]) => {
+        const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", "3.5"); c.setAttribute("fill", color);
+        svg.append(c);
+      });
+    }
     return svg;
   }
   function scale(key, labels) {
@@ -1609,6 +1640,10 @@
     else if (state.tab === "chat") app.append(renderChat());
     else if (state.editing) app.append(renderEditor());
     else app.append(renderPlan());
+    const screenKey = (state.view || "app") + ":" + (state.tab || "");
+    const screen = app.querySelector(".wrap, .story, .boot");
+    if (screen && screenKey !== state.screenKey) screen.classList.add("enter");
+    state.screenKey = screenKey;
     flushBodies();
     if (state.tab === "chat") {
       const box = document.querySelector(".chat");
@@ -1641,7 +1676,8 @@
 
   document.addEventListener("click", (e) => {
     const t = e.target.closest && e.target.closest("button");
-    if (t) tap(8);
+    if (!t) return;
+    tap(t.classList.contains("tick") ? 14 : 8);
   });
   document.addEventListener("visibilitychange", () => {
     if (!state.rest) return;

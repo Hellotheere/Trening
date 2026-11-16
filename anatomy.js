@@ -83,20 +83,29 @@
     svg.setAttribute("aria-label", side === "back" ? "Muskler bakfra" : "Muskler forfra");
     const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
     defs.innerHTML = `
-      <radialGradient id="${uid}-today" cx="38%" cy="30%" r="72%">
-        <stop offset="0" stop-color="#f4ffb0"/><stop offset="1" stop-color="#c6e030"/>
+      <linearGradient id="${uid}-base" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#3a424c"/><stop offset="1" stop-color="#22272d"/>
+      </linearGradient>
+      <radialGradient id="${uid}-today" cx="30%" cy="18%" r="82%">
+        <stop offset="0" stop-color="#f8ffc9"/><stop offset=".42" stop-color="#e4f56a"/><stop offset="1" stop-color="#b5d428"/>
       </radialGradient>
-      <radialGradient id="${uid}-assist" cx="38%" cy="30%" r="72%">
-        <stop offset="0" stop-color="#f3f8c8"/><stop offset="1" stop-color="#c9dc78"/>
+      <radialGradient id="${uid}-assist" cx="32%" cy="22%" r="84%">
+        <stop offset="0" stop-color="#f7fbe2"/><stop offset="1" stop-color="#c9dc96"/>
       </radialGradient>
-      <radialGradient id="${uid}-recovering" cx="38%" cy="30%" r="72%">
-        <stop offset="0" stop-color="#ffd2ae"/><stop offset="1" stop-color="#e88848"/>
+      <radialGradient id="${uid}-recovering" cx="32%" cy="22%" r="84%">
+        <stop offset="0" stop-color="#ffe4cc"/><stop offset="1" stop-color="#e08a46"/>
       </radialGradient>
-      <radialGradient id="${uid}-fresh" cx="38%" cy="30%" r="75%">
-        <stop offset="0" stop-color="#7a828a"/><stop offset="1" stop-color="#4c545c"/>
+      <radialGradient id="${uid}-fresh" cx="38%" cy="16%" r="88%">
+        <stop offset="0" stop-color="#9098a1"/><stop offset="1" stop-color="#4e565e"/>
       </radialGradient>
-      <filter id="${uid}-glow" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#d6ff4a" flood-opacity=".45"/>
+      <filter id="${uid}-glow" x="-45%" y="-45%" width="190%" height="190%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="14" result="blur"/>
+        <feFlood flood-color="#d6ff4a" flood-opacity=".42" result="color"/>
+        <feComposite in="color" in2="blur" operator="in" result="halo"/>
+        <feMerge>
+          <feMergeNode in="halo"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
       </filter>`;
     svg.appendChild(defs);
     const gid = (role) => "url(#" + uid + "-" + role + ")";
@@ -105,7 +114,7 @@
       assist: gid("assist"),
       recovering: gid("recovering"),
       fresh: gid("fresh"),
-      base: "#262a30",
+      base: gid("base"),
     };
     for (const group of rows) {
       const info = roleFor(group.muscle, paint);
@@ -113,8 +122,8 @@
         const poly = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
         poly.setAttribute("points", points);
         poly.setAttribute("fill", fill[info.role] || fill.fresh);
-        poly.setAttribute("stroke", info.role === "base" ? "#1e2226" : "rgba(8,10,12,.35)");
-        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "3");
+        poly.setAttribute("stroke", info.role === "today" ? "rgba(255,252,220,.4)" : info.role === "base" ? "none" : "rgba(8,10,12,.42)");
+        poly.setAttribute("stroke-width", info.role === "base" ? "0" : "2");
         poly.setAttribute("stroke-linejoin", "round");
         if (info.role === "today") poly.setAttribute("filter", "url(#" + uid + "-glow)");
         if (info.role !== "base") {
