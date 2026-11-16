@@ -468,15 +468,12 @@
     const wrap = el("div", { class: "wrap" });
     wrap.append(el("div", { class: "top" },
       el("div", {},
-        el("div", { class: "pill" }, "Uke " + (plan.week || 1) + (isCustom() ? " · din plan" : "")),
         el("h1", {}, greeting() + (name ? ", " + name : "")),
-        el("div", { class: "meta" }, goalLabel(d.profile && d.profile.goal) + " · " + ((d.progress && d.progress.streak) || 0) + " dager på rad"),
       ),
       el("div", { class: "iconrow" },
         el("button", { class: "iconbtn", type: "button", "aria-label": "Innstillinger", html: icon("gear"), onclick: () => { state.view = "settings"; render(); } }),
       ),
     ));
-    wrap.append(renderStage(d));
     wrap.append(el("div", { class: "switch" },
       el("button", { class: isCustom() ? "" : "on", type: "button", onclick: () => setSource("generated") }, "Trenerens plan"),
       el("button", { class: isCustom() ? "on" : "", type: "button", onclick: () => setSource("custom") }, "Min egen plan"),
@@ -503,23 +500,29 @@
     if (shown) {
       const isToday = shown.date === isoToday;
       const train = trainingDay(shown);
-      const quick = train && /minutt/i.test(shown.title || "");
-      const hero = el("div", { class: "hero" + (quick ? " quick" : "") });
+      const hero = el("div", { class: "hero" });
       let x0 = 0;
       hero.addEventListener("touchstart", (e) => { x0 = e.changedTouches[0].clientX; }, { passive: true });
       hero.addEventListener("touchend", (e) => {
         const dx = e.changedTouches[0].clientX - x0;
         if (Math.abs(dx) > 50) shiftSelected(dx < 0 ? 1 : -1);
       }, { passive: true });
-      if (quick) hero.append(el("div", { class: "gen-pill" }, "Satt sammen for deg"));
-      hero.append(
+      const head = el("div", { class: "hero-head" });
+      const copy = el("div", {},
         el("div", { class: "kicker" }, isToday ? "I dag" : prettyDay(shown.weekday)),
         el("div", { class: "title" }, train ? shown.title : "Hviledag"),
-        el("p", { class: "blurb" }, train ? (shown.blurb || "") : "Ingen økt i dag. Sov, gå en rolig tur, og la musklene hente seg inn."),
-        el("p", { class: "tip" }, (globalThis.Trener && Trener.dailyTip) ? Trener.dailyTip(d) : ""),
+        el("p", { class: "time" }, train
+          ? ((shown.exercises || []).length + " øvelser · " + estimateMinutes(shown) + " min")
+          : "Hvile"),
       );
+      head.append(copy);
+      if (isToday && globalThis.TrenerAnatomy) {
+        const mini = el("button", { class: "map-mini", type: "button", "aria-label": "Muskelkart", onclick: (e) => { e.stopPropagation(); state.view = "body"; render(); } });
+        mini.appendChild(TrenerAnatomy.figure("front", d.body));
+        head.append(mini);
+      }
+      hero.append(head);
       if (train) {
-        hero.append(el("div", { class: "time" }, "Omtrent " + estimateMinutes(shown) + " min"));
         hero.append(el("button", { class: "btn start", type: "button", onclick: () => {
           tap(16); state.workoutSess = shown; openWorkout(true); state.tab = "okt"; render();
         } }, isToday ? "Start økt" : "Start denne økten"));
@@ -533,21 +536,31 @@
           list.append(row);
         }
         hero.append(list);
+        if (isCustom()) hero.append(el("button", { class: "textlink", type: "button", onclick: openEditor }, "Rediger uken"));
       } else {
         const next = nextTraining(shown);
         if (next) {
-          hero.append(el("p", { class: "next-session" }, "Neste økt: " + next.weekday));
-          hero.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:12px", onclick: () => { state.previewDay = next.date; render(); } }, "Se " + next.weekday));
+          hero.append(el("p", { class: "next-session" }, "Neste: " + next.weekday));
+          hero.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => { state.previewDay = next.date; render(); } }, "Se " + next.weekday));
         }
       }
       wrap.append(hero);
-      wrap.append(renderTracker(d, isoToday, false));
-      wrap.append(el("div", { class: "row quick-actions" },
-        el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "ready"; render(); } }, "Klar-sjekk"),
-        el("button", { class: "btn ghost", type: "button", onclick: () => makeQuick(20) }, "Jeg har 20 min"),
-      ));
+    }
+    wrap.append(el("div", { class: "row quiet" },
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "ready"; render(); } }, "Klar-sjekk"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => makeQuick(20) }, "20 min"),
+      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "programs"; render(); } }, "Programmer"),
+    ));
+    const more = el("details", { class: "more" });
+    more.append(el("summary", {}, "Mer"));
+    more.append(renderStage(d));
+    more.append(renderTracker(d, isoToday, false));
+    const tip = (globalThis.Trener && Trener.dailyTip) ? Trener.dailyTip(d) : "";
+    if (tip) more.append(el("p", { class: "muted" }, tip));
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "library"; state.libQuery = ""; state.muscle = ""; render(); } }, "Bibliotek"));
+    if (shown) {
       const marks = (d.day_marks || {})[shown.date];
-      wrap.append(el("div", { class: "row", style: "margin-bottom:12px" },
+      more.append(el("div", { class: "row" },
         el("button", { class: "btn ghost", type: "button", onclick: () => markShown(shown, marks === "done" ? "" : "done") }, marks === "done" ? "Ferdig" : "Marker ferdig"),
         el("button", { class: "btn ghost", type: "button", onclick: () => markShown(shown, marks === "skipped" ? "" : "skipped") }, marks === "skipped" ? "Hoppet over" : "Hoppet over?"),
       ));
@@ -556,7 +569,7 @@
         const sel = el("select", { onchange: (e) => { state.moveTo = e.target.value; } });
         sel.append(el("option", { value: "" }, "Flytt økten til…"));
         for (const day of others) sel.append(el("option", { value: day.weekday }, prettyDay(day.weekday)));
-        wrap.append(el("div", { class: "row" }, sel, el("button", { class: "btn ghost", type: "button", onclick: () => moveShown(shown) }, "Flytt")));
+        more.append(el("div", { class: "row" }, sel, el("button", { class: "btn ghost", type: "button", onclick: () => moveShown(shown) }, "Flytt")));
       }
     }
     const muscles = {};
@@ -565,45 +578,30 @@
       for (const ex of day.exercises || []) muscles[ex.muscle || "annet"] = (muscles[ex.muscle || "annet"] || 0) + 1;
     }
     const balance = Object.entries(muscles);
-    if (balance.length) {
-      wrap.append(el("h2", {}, "Muskelbalanse"));
-      wrap.append(el("p", { class: "lead" }, balance.map(([m, n]) => m + " " + n).join(" · ") + ". Hviledager bryter ikke streaken."));
-    }
-    wrap.append(el("p", { class: "muted" }, "Påminnelse: legg økten i kalenderen, for eksempel kl. 17. Da er det lettere å møte opp."));
-    wrap.append(el("div", { class: "row", style: "margin-top:8px" },
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "library"; state.libQuery = ""; state.muscle = ""; render(); } }, "Øvelsesbibliotek"),
-      el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "programs"; render(); } }, "Programmer"),
-    ));
+    if (balance.length) more.append(el("p", { class: "muted" }, balance.map(([m, n]) => m + " " + n).join(" · ")));
 
     if (isCustom()) {
-      wrap.append(el("button", { class: "btn ghost", type: "button", onclick: openEditor }, "Rediger uken"));
       const sugs = d.suggestions || [];
-      if (sugs.length) {
-        wrap.append(el("h2", {}, "Forslag"));
-        for (const s of sugs) {
-          wrap.append(el("div", { class: "card suggest" },
-            el("h3", {}, s.title + " · " + s.weekday),
-            el("p", { class: "muted" }, s.blurb),
-            el("button", { class: "btn ghost", type: "button", style: "margin-top:10px", onclick: () => applySuggestion(s) }, "Legg inn på " + s.weekday),
-          ));
-        }
+      for (const s of sugs) {
+        more.append(el("div", { class: "card suggest" },
+          el("h3", {}, s.title),
+          el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => applySuggestion(s) }, "Legg på " + s.weekday),
+        ));
       }
     }
     if ((plan.meals || []).length) {
-      wrap.append(el("h2", {}, "Mat i dag"));
       const meals = el("div", { class: "card" });
-      const nut = plan.nutrition || {};
-      meals.append(el("div", { class: "muted" }, "Ca. " + (nut.kcal || "–") + " kcal · " + (nut.protein_g || "–") + " g protein"));
       for (const m of plan.meals) {
         meals.append(el("div", { class: "meal" },
           el("div", { class: "slot" }, SLOTS[m.slot] || m.slot),
           el("div", {}, el("div", { class: "name" }, m.name)),
-          el("div", { class: "macros" }, m.kcal, el("small", {}, m.protein + " g")),
+          el("div", { class: "macros" }, m.kcal),
         ));
       }
-      wrap.append(meals);
+      more.append(meals);
     }
-    wrap.append(el("p", { class: "safety" }, (plan.safety || d.safety || "")));
+    if (plan.safety || d.safety) more.append(el("p", { class: "safety" }, (plan.safety || d.safety || "")));
+    wrap.append(more);
     wrap.append(renderNav());
     return wrap;
   }
@@ -850,9 +848,7 @@
       if (dx > 0 && w.i > 0) { w.i -= 1; state.rest = null; render(); }
     }, { passive: true });
     wrap.append(el("h1", {}, ex.name));
-    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-bottom:8px", onclick: () => { state.detailId = ex.id; state.detailName = ex.name; state.view = "demo"; render(); } }, "Se løftet"));
-    if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, "Forslag: " + String(ex.suggest_kg).replace(".", ",") + " kg"));
-    if (ex.hint) wrap.append(el("div", { class: "hint" + (ex.hint_kind === "reduce" || ex.hint_kind === "deload" ? " warn" : "") }, ex.hint));
+    if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, String(ex.suggest_kg).replace(".", ",") + " kg"));
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.rest && state.rest.left > 0) {
       const c = 2 * Math.PI * 86;
@@ -861,17 +857,8 @@
       t.innerHTML = `<svg viewBox="0 0 200 200"><circle class="bg" cx="100" cy="100" r="86"/><circle class="fg" cx="100" cy="100" r="86" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg>`;
       t.append(el("div", { class: "time" }, fmtTime(state.rest.left)));
       wrap.append(el("div", { class: "timer-wrap" }, t));
-      wrap.append(el("p", { class: "lead" }, "Pust. Rist løs. Neste sett venter."));
       wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { clearInterval(state.rest.t); state.rest = null; render(); } }, "Hopp over hvilen"));
     }
-    if (!ex.suggest_kg && lastLine(ex)) wrap.append(el("p", { class: "last" }, lastLine(ex)));
-    if (ex.suggest_kg) wrap.append(el("p", { class: "muted" }, "Oppvarming: to lette sett, omtrent halvparten og deretter tre firedeler av " + String(ex.suggest_kg).replace(".", ",") + " kg."));
-    if (ex.suggest_kg && globalThis.Trener && Trener.platesFor) wrap.append(el("p", { class: "muted" }, Trener.platesFor(ex.suggest_kg).label));
-    if (ex.desc) wrap.append(el("p", { class: "cue" }, ex.desc));
-    if (ex.tips) wrap.append(el("div", { class: "tip" }, ex.tips));
-    const note = el("input", { value: ex.note || "", placeholder: "Notat til øvelsen", oninput: (e) => { ex.note = e.target.value; } });
-    wrap.append(note);
-    wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { ex.superset = !ex.superset; render(); } }, ex.superset ? "Supersett med neste: på" : "Supersett med neste"));
 
     const sets = el("div", { class: "sets" });
     ex.log.forEach((s, i) => {
@@ -898,37 +885,45 @@
         stepper(s.reps, "Reps", 1, (v) => { s.reps = v; }),
         stepper(s.weight_kg, "Kg", 2.5, (v) => { s.weight_kg = v; }),
       );
-      const rpe = el("select", { "aria-label": "RPE", onchange: (e) => { s.rpe = e.target.value; } },
-        el("option", { value: "" }, "RPE"),
-      );
-      for (let n = 6; n <= 10; n++) rpe.append(el("option", { value: String(n), selected: String(s.rpe || "") === String(n) }, String(n)));
       row.append(el("button", { class: "tick" + (s.done ? " on" : ""), type: "button", "aria-label": "Sett ferdig", onclick: () => {
         s.done = !s.done; tap(14);
         if (s.done && ex.rest_sec) startRest(ex.rest_sec);
         else render();
         saveWorkout(false);
-      } }, s.done ? "✓" : "○"), rpe);
+      } }, s.done ? "✓" : "○"));
       sets.append(row);
     });
-    wrap.append(el("h2", {}, "Sett"), sets);
-    wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => {
+    wrap.append(sets);
+    const more = el("details", { class: "more" });
+    more.append(el("summary", {}, "…"));
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.detailId = ex.id; state.detailName = ex.name; state.view = "demo"; render(); } }, "Se løftet"));
+    if (ex.hint) more.append(el("p", { class: "muted" }, ex.hint));
+    if (ex.suggest_kg && globalThis.Trener && Trener.platesFor) more.append(el("p", { class: "muted" }, Trener.platesFor(ex.suggest_kg).label));
+    const note = el("input", { value: ex.note || "", placeholder: "Notat", oninput: (e) => { ex.note = e.target.value; } });
+    more.append(note);
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => { ex.superset = !ex.superset; render(); } }, ex.superset ? "Supersett på" : "Supersett"));
+    ex.log.forEach((s, i) => {
+      const rpe = el("select", { "aria-label": "RPE sett " + (i + 1), onchange: (e) => { s.rpe = e.target.value; } }, el("option", { value: "" }, "RPE " + (i + 1)));
+      for (let n = 6; n <= 10; n++) rpe.append(el("option", { value: String(n), selected: String(s.rpe || "") === String(n) }, String(n)));
+      more.append(rpe);
+    });
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => {
       const reps = (ex.last_reps && ex.last_reps[0]) || midReps(ex.reps);
       const kg = ex.last_kg != null ? ex.last_kg : (ex.suggest_kg || "");
       ex.log.forEach((s) => { s.reps = reps; s.weight_kg = kg; });
       render();
     } }, "Samme som sist"));
-    wrap.append(el("div", { class: "row" },
-      el("button", { class: "btn ghost", type: "button", onclick: () => {
-        state.undo = JSON.parse(JSON.stringify(ex.log));
-        ex.log.push({ reps: midReps(ex.reps), weight_kg: ex.suggest_kg || "", done: false });
-        render();
-      } }, "Nytt sett"),
-      el("button", { class: "btn ghost", type: "button", disabled: !state.undo, onclick: () => {
-        if (!state.undo) return;
-        ex.log = state.undo; state.undo = null; render();
-      } }, "Angre"),
-    ));
-    wrap.append(el("button", { class: "btn ghost", type: "button", style: "margin-top:8px", onclick: () => { state.swap = true; state.libQuery = ""; render(); } }, "Bytt øvelse"));
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => {
+      state.undo = JSON.parse(JSON.stringify(ex.log));
+      ex.log.push({ reps: midReps(ex.reps), weight_kg: ex.suggest_kg || "", done: false });
+      render();
+    } }, "Nytt sett"));
+    more.append(el("button", { class: "btn ghost", type: "button", disabled: !state.undo, onclick: () => {
+      if (!state.undo) return;
+      ex.log = state.undo; state.undo = null; render();
+    } }, "Angre"));
+    more.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.swap = true; state.libQuery = ""; render(); } }, "Bytt øvelse"));
+    wrap.append(more);
     const nav = el("div", { class: "row", style: "margin-top:12px" });
     nav.append(el("button", { class: "btn ghost", type: "button", disabled: w.i === 0, onclick: () => { w.i--; state.rest = null; render(); } }, "Forrige"));
     if (w.i < w.exercises.length - 1) nav.append(el("button", { class: "btn", type: "button", onclick: () => { w.i++; state.rest = null; saveWorkout(false); } }, "Neste øvelse"));
@@ -980,9 +975,7 @@
     const d = state.data;
     const p = d.progress || {};
     const wrap = el("div", { class: "wrap" },
-      el("div", { class: "pill warm" }, "Fremgang"),
-      el("h1", {}, "Slik går det"),
-      el("p", { class: "lead" }, "Streak, volum og rekorder. Alt ligger bare på denne telefonen."),
+      el("h1", {}, "Fremgang"),
     );
     wrap.append(el("div", { class: "row", style: "margin-bottom:12px" },
       el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "recap"; state.recap = 0; render(); } }, "Ukesrecap"),
@@ -1003,10 +996,10 @@
     ));
     const month = todayIso().slice(0, 7);
     const monthDone = ((d.workouts || []).filter((w) => w.completed && String(w.date || "").startsWith(month))).length;
-    wrap.append(el("div", { class: "card" }, el("h3", {}, "Månedsrapport"), el("p", {}, monthDone + " økter denne måneden. Hviledagene er med i planen, ikke et brudd.")));
+    wrap.append(el("div", { class: "card" }, el("h3", {}, "Måned"), el("p", {}, monthDone + " økter")));
     const badges = d.badges || [];
     if (!badges.length) {
-      wrap.append(el("div", { class: "card" }, el("h3", {}, "Merker"), el("p", { class: "muted" }, "Fullfør en økt, så dukker det første merket opp her.")));
+      wrap.append(el("div", { class: "card" }, el("h3", {}, "Merker"), el("p", { class: "muted" }, "Ingen ennå.")));
     } else {
       const box = el("div", { class: "card" }, el("h3", {}, "Merker"));
       for (const b of badges) box.append(el("p", {}, b.title + " — " + b.text));
@@ -1142,21 +1135,20 @@
     const next = nextTraining(today);
     const status = today && trainingDay(today) ? "I dag: " + today.title + "." : "I dag er en hviledag." + (next ? " Neste økt: " + next.weekday + "." : "");
     const wrap = el("div", { class: "wrap chat-wrap" },
-      el("div", { class: "pill" }, "Trener"),
-      el("h1", {}, "Spør meg"),
+      el("h1", {}, "Trener"),
       el("p", { class: "lead" }, status),
     );
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     const chat = el("div", { class: "chat" });
     const msgs = d.chat || [];
-    if (!msgs.length) chat.append(el("div", { class: "bubble coach" }, "Jeg kjenner planen og loggen din. Spør hva du skal trene, hvordan benken går, eller hva du skal spise."));
+    if (!msgs.length) chat.append(el("div", { class: "bubble coach" }, "Spør om dagens økt, benken eller mat."));
     for (const m of msgs) chat.append(el("div", { class: "bubble " + (m.role === "user" ? "user" : "coach") }, m.text));
     if (state.typing) chat.append(el("div", { class: "bubble coach" }, el("span", { class: "typing" }, el("i"), el("i"), el("i"))));
     wrap.append(chat);
     const dock = el("div", { class: "composer" });
     const chips = el("div", { class: "chips" });
-    for (const q of ["Hva skal jeg trene i dag?", "Hvordan går det med benken?", "Hva gjør jeg om mat?", "Hvor mange reps?"]) {
-      chips.append(el("button", { class: "chip", type: "button", onclick: () => sendChat(q) }, q));
+    for (const [label, q] of [["I dag", "Hva skal jeg trene i dag?"], ["Benken", "Hvordan går det med benken?"], ["Mat", "Hva gjør jeg om mat?"]]) {
+      chips.append(el("button", { class: "chip", type: "button", onclick: () => sendChat(q) }, label));
     }
     dock.append(chips);
     const ta = el("textarea", { placeholder: "Skriv til treneren…", rows: "1" }, state.chatDraft || "");

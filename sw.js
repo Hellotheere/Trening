@@ -1,5 +1,5 @@
 /* Versjonert cache for frakoblet bruk under ./ (GitHub Pages https://hellotheere.github.io/Trening/). */
-const VERSION = "v12";
+const VERSION = "v13";
 const CACHE = "trener-static-" + VERSION;
 const ASSETS = [
   "./",
