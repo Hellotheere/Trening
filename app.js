@@ -314,7 +314,10 @@
   function applyTheme() {
     const pref = ((state.data || {}).prefs || {}).theme || "dark";
     const system = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-    document.documentElement.dataset.theme = pref === "system" ? system : pref;
+    const theme = pref === "system" ? system : pref;
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme === "light" ? "#f3f4f1" : "#090a0c");
   }
   async function setSource(src) {
     state.err = "";
@@ -418,19 +421,14 @@
     if (rec.length) bits.push("henter seg: " + rec.join(", "));
     return bits.join(" · ") || "Kroppen er frisk";
   }
-  function muscleDetail(m) {
-    if (!m) return "Dra sidelengs for å snu. Trykk på en muskel for navn og siste sett.";
-    const role = m.role === "today"
-      ? "Hovedmål i dag."
-      : m.role === "assist"
-        ? "Er med på økta, lettere markert."
-        : m.role === "recovering"
-          ? "Henter seg etter siste økt."
-          : "Ikke i dagens økt.";
-    const last = m.sets
-      ? "Sist " + (m.date || "") + ": " + m.sets + " sett" + (m.kg ? ", " + String(m.kg).replace(".", ",") + " kg" : "") + "."
-      : "Ingen logger på denne muskelen ennå.";
-    return m.name + ". " + role + " " + last;
+  function muscleDetail(m, exercises) {
+    if (!m) return "";
+    const names = (globalThis.Trener && Trener.exercisesForMuscle)
+      ? Trener.exercisesForMuscle(exercises || [], m.id)
+      : [];
+    if (names.length) return m.name + " · " + names.join(", ");
+    if (m.sets) return m.name + " · " + m.sets + " sett" + (m.kg ? " · " + String(m.kg).replace(".", ",") + " kg" : "");
+    return m.name;
   }
   function renderStage(d) {
     const rings = d.rings || { sessions: 0, volume: 0, done: 0, goal: 3, consistency: 0 };
@@ -842,8 +840,23 @@
       if (dx < 0 && w.i < w.exercises.length - 1) { w.i += 1; state.rest = null; render(); }
       if (dx > 0 && w.i > 0) { w.i -= 1; state.rest = null; render(); }
     }, { passive: true });
-    wrap.append(el("h1", {}, ex.name));
-    if (ex.suggest_kg) wrap.append(el("p", { class: "last" }, String(ex.suggest_kg).replace(".", ",") + " kg"));
+    const exKey = (w.date || "") + ":" + w.i;
+    const freshEx = state.exAnim !== exKey;
+    state.exAnim = exKey;
+    wrap.append(el("h1", { class: freshEx ? "set-in" : "" }, ex.name));
+    const delta = ex.suggest_kg != null && ex.last_kg != null
+      ? Math.round((Number(ex.suggest_kg) - Number(ex.last_kg)) * 10) / 10
+      : 0;
+    if (ex.last_kg != null || delta > 0) {
+      const hint = el("div", { class: "hint-row" });
+      if (ex.last_kg != null) hint.append(el("span", {}, "Forrige " + String(ex.last_kg).replace(".", ",") + " kg"));
+      if (delta > 0) hint.append(el("button", { class: "hint-chip", type: "button", onclick: () => {
+        const open = (ex.log || []).find((s) => !s.done) || (ex.log || [])[0];
+        if (open) open.weight_kg = ex.suggest_kg;
+        render();
+      } }, "+" + String(delta).replace(".", ",") + " kg"));
+      wrap.append(hint);
+    }
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     const resting = state.rest && state.rest.left > 0;
     if (resting) {
@@ -1022,7 +1035,37 @@
     );
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
-    wrap.append(svgChart(counts, "#d6ff4a", true));
+    const liftMap = new Map();
+    for (const wlog of d.workouts || []) {
+      if (!wlog.completed) continue;
+      for (const ex of wlog.exercises || []) {
+        let best = 0;
+        for (const s of ex.sets || []) if (s.done) best = Math.max(best, Number(s.weight_kg) || 0);
+        if (!best) continue;
+        const id = ex.id || ex.name || "øvelse";
+        const lib = ((d.library) || []).find((x) => x.id === ex.id);
+        const name = ex.name || (lib && lib.name) || "Øvelse";
+        if (!liftMap.has(id)) liftMap.set(id, { name, pts: [] });
+        const row = liftMap.get(id);
+        row.name = name;
+        row.pts.push(best);
+      }
+    }
+    const lifts = [...liftMap.values()].sort((a, b) => b.pts.length - a.pts.length);
+    if (lifts.length) {
+      const i = Math.abs(state.lift || 0) % lifts.length;
+      const lift = lifts[i];
+      const max = Math.max(...lift.pts);
+      const mark = lift.pts.lastIndexOf(max);
+      const earlier = lift.pts.slice(0, -1);
+      const isPr = !earlier.length || max > Math.max(0, ...earlier);
+      const name = lifts.length > 1
+        ? el("button", { class: "lift-name", type: "button", onclick: () => { state.lift = i + 1; render(); } }, lift.name)
+        : el("p", { class: "lift-name" }, lift.name);
+      const head = el("div", { class: "lift-head" }, name);
+      if (isPr) head.append(el("span", { class: "pr-pill" }, "Rekord"));
+      wrap.append(head, svgChart(lift.pts, "#d6ff4a", true, mark));
+    } else wrap.append(svgChart(counts, "#d6ff4a", true));
     const weekEx = [];
     const wk = d.week || {};
     for (const w of d.workouts || []) {
@@ -1040,9 +1083,9 @@
     }
     const weekMap = el("div", { class: "map-card week-map" }, el("p", { class: "kicker" }, "Uken"));
     weekMap.append(muscleBoard(weekPaint, () => {}));
-    wrap.append(weekMap);
     const more = el("details", { class: "more" });
     more.append(el("summary", {}, "Mer"));
+    more.append(weekMap);
     more.append(el("div", { class: "row" },
       el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "recap"; state.recap = 0; render(); } }, "Ukesrecap"),
       el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "badges"; render(); } }, "Merker"),
@@ -1117,7 +1160,7 @@
     }
     return d;
   }
-  function svgChart(vals, color, bare) {
+  function svgChart(vals, color, bare, mark) {
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     const uid = "ch" + (++chartN);
     svg.setAttribute("class", "chart" + (bare ? " spark" : ""));
@@ -1159,6 +1202,15 @@
         c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", "3.5"); c.setAttribute("fill", color);
         svg.append(c);
       });
+    }
+    if (mark != null && pts[mark]) {
+      const halo = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      halo.setAttribute("cx", pts[mark][0]); halo.setAttribute("cy", pts[mark][1]);
+      halo.setAttribute("r", "9"); halo.setAttribute("fill", "none"); halo.setAttribute("stroke", color); halo.setAttribute("stroke-width", "2");
+      const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+      dot.setAttribute("cx", pts[mark][0]); dot.setAttribute("cy", pts[mark][1]);
+      dot.setAttribute("r", "5.5"); dot.setAttribute("fill", color);
+      svg.append(halo, dot);
     }
     return svg;
   }
@@ -1486,7 +1538,7 @@
     const card = el("div", { class: "card map-card" });
     card.append(
       muscleBoard(paint, (row) => {
-        state.muscleNote = muscleDetail(row);
+        state.muscleNote = muscleDetail(row, (shown && shown.exercises) || []);
         note.textContent = state.muscleNote;
       }),
       muscleLegend(),
@@ -1502,7 +1554,7 @@
     );
     const note = el("p", { class: "muscle-readout" }, state.muscleNote || "Trykk på en muskel.");
     wrap.append(muscleBoard(d.body || [], (row) => {
-      state.muscleNote = muscleDetail(row);
+      state.muscleNote = muscleDetail(row, ((d.today || {}).exercises) || []);
       note.textContent = state.muscleNote;
     }), muscleLegend(), note);
     wrap.append(el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "app"; state.muscleNote = ""; render(); } }, "Tilbake"));

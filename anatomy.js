@@ -86,8 +86,8 @@
       <linearGradient id="${uid}-base" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#3a424c"/><stop offset="1" stop-color="#22272d"/>
       </linearGradient>
-      <radialGradient id="${uid}-today" cx="30%" cy="18%" r="82%">
-        <stop offset="0" stop-color="#f8ffc9"/><stop offset=".42" stop-color="#e4f56a"/><stop offset="1" stop-color="#b5d428"/>
+      <radialGradient id="${uid}-today" cx="30%" cy="18%" r="85%">
+        <stop offset="0" stop-color="#fbffd8"/><stop offset=".28" stop-color="#f0ff8a"/><stop offset=".62" stop-color="#d6ee4a"/><stop offset="1" stop-color="#a8c81e"/>
       </radialGradient>
       <radialGradient id="${uid}-assist" cx="32%" cy="22%" r="84%">
         <stop offset="0" stop-color="#f7fbe2"/><stop offset="1" stop-color="#c9dc96"/>

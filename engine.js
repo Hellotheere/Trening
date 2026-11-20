@@ -1334,6 +1334,14 @@
     return COARSE_HITS[coarse] || [];
   }
 
+  function exercisesForMuscle(exercises, muscleId) {
+    const names = [];
+    for (const ex of exercises || []) {
+      if (hitsForExercise(ex).some(([id, w]) => id === muscleId && w >= 0.75)) names.push(ex.name);
+    }
+    return names;
+  }
+
   function bodyPaint(state, today) {
     today = today || todayOslo();
     const score = {};
@@ -2052,7 +2060,7 @@
     normalizeProfile, nutritionTargets, generateMeals, generatePlan, checkinDecision, adjustPlan,
     todaySession, nextTrainingDay, isTrainingDay, progressStats, ruleReply, coachReply, coachBackend,
     platesFor, achievements, badgeCatalog, weeklySummary, programCatalog, buildProgram, dailyTip, exerciseHistory, interpretAdjust,
-    muscleStatus, bodyPaint, weeklyRings, readinessPlan, quickWorkout, xpState,
+    muscleStatus, bodyPaint, exercisesForMuscle, weeklyRings, readinessPlan, quickWorkout, xpState,
     library, mondayExercises, armDayExercises, defaultCustomPlan, normalizeExercise, normalizeCustomPlan,
     estimate1rm, lastPerformance, personalRecords, overloadHint,
     annotateExercises, annotatePlan, materializeCustomPlan, migrateState, resolvePlan,
