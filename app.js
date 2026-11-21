@@ -43,6 +43,7 @@
       else if (path === "program") data = S.chooseProgram(body);
       else if (path === "wellness") data = S.logWellness(body);
       else if (path === "quick") data = S.quickDay(body);
+      else if (path === "weight") data = S.logWeight(body);
       else throw new Error("Ukjent handling.");
       return data;
     } catch (e) {
@@ -513,7 +514,7 @@
         } }, isToday ? "Start økt" : "Start denne økten"));
         const list = el("div", { class: "exlist" });
         for (const ex of shown.exercises || []) {
-          const row = el("button", { class: "ex", type: "button", onclick: () => { state.detailId = ex.id; state.detailName = ex.name; state.view = "detail"; render(); } },
+          const row = el("button", { class: "ex", type: "button", onclick: () => openGuide(ex) },
             el("div", {},
               el("div", { class: "name" }, ex.name),
               el("div", { class: "meta" }, [ex.muscle, doseText(ex), lastLine(ex)].filter(Boolean).join(" · ")),
@@ -843,7 +844,7 @@
     const exKey = (w.date || "") + ":" + w.i;
     const freshEx = state.exAnim !== exKey;
     state.exAnim = exKey;
-    wrap.append(el("h1", { class: freshEx ? "set-in" : "" }, ex.name));
+    wrap.append(el("button", { class: "ex-title" + (freshEx ? " set-in" : ""), type: "button", onclick: () => openGuide(ex) }, ex.name));
     const delta = ex.suggest_kg != null && ex.last_kg != null
       ? Math.round((Number(ex.suggest_kg) - Number(ex.last_kg)) * 10) / 10
       : 0;
@@ -914,6 +915,15 @@
         onclick: () => {
           s.done = !s.done;
           state.justChecked = s.done ? key : "";
+          if (s.done) {
+            const kg = Number(String(s.weight_kg).replace(",", ".")) || 0;
+            const prev = Number(ex.pr_kg) || 0;
+            if (kg > 0 && prev > 0 && kg > prev) {
+              state.prFlash = { name: ex.name, kg };
+              clearTimeout(state.prTimer);
+              state.prTimer = setTimeout(() => { state.prFlash = null; render(); }, 1700);
+            }
+          }
           if (s.done && ex.rest_sec) startRest(ex.rest_sec);
           else render();
           saveWorkout(false);
@@ -989,7 +999,10 @@
         el("div", {}, el("b", {}, String(s.prs.length)), el("span", {}, "rekorder")),
       ),
     );
-    if (s.prs.length) card.append(el("p", { class: "pr-line" }, s.prs.join(" · ")));
+    if (s.prs.length) {
+      card.append(el("p", { class: "pr-pill" }, "Ny rekord"));
+      card.append(el("p", { class: "pr-line" }, s.prs.join(" · ")));
+    }
     const wrap = el("div", { class: "wrap solo celebrate" }, card);
     wrap.append(el("button", { class: "btn", type: "button", onclick: () => { state.view = "app"; state.summary = null; state.workout = null; state.tab = "plan"; render(); } }, "Ferdig"));
     wrap.append(el("button", { class: "textlink", type: "button", onclick: () => shareSummary(s) }, "Lagre bilde"));
@@ -1011,6 +1024,126 @@
     a.href = canvas.toDataURL("image/png"); a.download = "okt-" + todayIso() + ".png"; a.click();
   }
 
+  function weekRun(d) {
+    const dates = new Set(((d.workouts || []).filter((w) => w.completed).map((w) => w.date)));
+    let cursor = (globalThis.Trener && Trener.mondayOf) ? Trener.mondayOf(todayIso()) : todayIso();
+    const has = (mon) => {
+      for (let i = 0; i < 7; i++) if (dates.has(addDays(mon, i))) return true;
+      return false;
+    };
+    if (!has(cursor)) cursor = addDays(cursor, -7);
+    let n = 0;
+    while (has(cursor) && n < 60) { n += 1; cursor = addDays(cursor, -7); }
+    return n;
+  }
+  function exName(d, ex) {
+    if (ex && ex.name) return ex.name;
+    const lib = (((d || {}).library) || []).find((x) => x.id === (ex && ex.id));
+    return (lib && lib.name) || "Øvelse";
+  }
+  function monthCalendar(d) {
+    const today = todayIso();
+    const [y, m] = today.split("-").map(Number);
+    const first = y + "-" + String(m).padStart(2, "0") + "-01";
+    const names = ["mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag", "søndag"];
+    const wd = (globalThis.Trener && Trener.weekdayName) ? Trener.weekdayName(first) : "mandag";
+    const lead = Math.max(0, names.indexOf(wd));
+    const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const byDate = {};
+    for (const w of d.workouts || []) if (w.completed && w.date) byDate[w.date] = w;
+    const box = el("div", { class: "cal" });
+    for (const lab of ["M", "T", "O", "T", "F", "L", "S"]) box.append(el("b", {}, lab));
+    for (let i = 0; i < lead; i++) box.append(el("span", { class: "cal-pad" }));
+    for (let day = 1; day <= dim; day++) {
+      const iso = y + "-" + String(m).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+      const sess = byDate[iso];
+      const title = (sess && sess.title) || "";
+      const kind = /bryst/i.test(title) ? "chest" : (/skulder|arm/i.test(title) ? "arms" : (sess ? "other" : ""));
+      const btn = el("button", {
+        type: "button",
+        class: [iso === today ? "today" : "", state.calDay === iso ? "on" : ""].filter(Boolean).join(" "),
+        onclick: () => { state.calDay = state.calDay === iso ? "" : iso; render(); },
+      }, el("span", {}, String(day)));
+      if (kind) btn.append(el("i", { class: "dot " + kind }));
+      box.append(btn);
+    }
+    const block = el("div", { class: "cal-block" }, box);
+    block.append(el("p", { class: "cal-legend" }, el("i", { class: "dot chest" }), "Bryst", el("i", { class: "dot arms" }), "Armer"));
+    if (state.calDay && byDate[state.calDay]) {
+      const card = el("div", { class: "cal-day" }, el("p", { class: "kicker" }, byDate[state.calDay].title || "Økt"));
+      for (const ex of byDate[state.calDay].exercises || []) {
+        const sets = (ex.sets || []).filter((s) => s.done).map((s) => (s.reps != null ? s.reps : "–") + (s.weight_kg ? " × " + String(s.weight_kg).replace(".", ",") : "")).join(", ");
+        card.append(el("p", {}, el("b", {}, exName(d, ex)), sets ? el("span", { class: "muted" }, " · " + sets) : null));
+      }
+      block.append(card);
+    } else if (state.calDay) block.append(el("p", { class: "muted cal-empty" }, "Ingen økt denne dagen."));
+    return block;
+  }
+  function weightRow(d) {
+    const weights = ((d.progress || {}).weights) || [];
+    const last = weights.length ? weights[weights.length - 1].kg : "";
+    const row = el("div", { class: "weight-row" });
+    const input = el("input", {
+      type: "number", inputmode: "decimal", "aria-label": "Kroppsvekt", placeholder: "kg",
+      value: state.weightDraft != null ? state.weightDraft : (last === "" ? "" : last),
+    });
+    input.addEventListener("input", (e) => { state.weightDraft = e.target.value; });
+    row.append(el("label", { class: "weight-label" }, "Vekt"), input);
+    row.append(el("button", { class: "btn", type: "button", onclick: async () => {
+      try { state.data = await api("weight", { body: { kg: state.weightDraft != null ? state.weightDraft : input.value } }); state.weightDraft = null; state.err = ""; }
+      catch (e) { state.err = e.message; }
+      render();
+    } }, "Lagre"));
+    if (weights.length > 1) {
+      const chart = svgChart(weights.map((w) => Number(w.kg)), "#9fd6ff", true);
+      chart.classList.add("weight-spark");
+      row.append(chart);
+    }
+    return row;
+  }
+  function openGuide(ex) {
+    const lib = (((state.data || {}).library) || []).find((x) => x.id === ex.id) || {};
+    state.guide = {
+      id: ex.id,
+      name: ex.name || lib.name || "Øvelse",
+      desc: ex.desc || lib.desc || "",
+      tips: ex.tips || lib.tips || "",
+    };
+    render();
+  }
+  function splitSentences(text, fallback) {
+    const parts = String(text || "").split(/(?<=\.)\s+/).map((s) => s.replace(/\.$/, "").trim()).filter(Boolean);
+    return parts.length ? parts : fallback.slice();
+  }
+  function guideSheet() {
+    const g = state.guide;
+    if (!g) return null;
+    const steps = splitSentences(g.desc, ["Stå stødig", "Beveg deg rolig", "Kom tilbake med kontroll"]).slice(0, 3);
+    while (steps.length < 3) steps.push(["Hold kontroll", "Pust jevnt", "Stopp om det gjør vondt"][steps.length]);
+    let tips = splitSentences(g.tips, []);
+    if (tips.length < 2) tips = tips.concat(["Kontroller bevegelsen", "Pust jevnt"]).slice(0, 2);
+    else tips = tips.slice(0, 2);
+    const frag = el("div", {});
+    frag.append(el("div", { class: "backdrop", onclick: () => { state.guide = null; render(); } }));
+    const sheet = el("div", { class: "sheet guide-sheet", role: "dialog", "aria-label": g.name });
+    sheet.append(el("div", { class: "handle" }), el("h3", {}, g.name));
+    sheet.append(el("div", { class: "guide-pose", html: poseMarkup(g.id, g.name) }));
+    const ol = el("ol", { class: "cues" });
+    steps.forEach((s) => ol.append(el("li", {}, s)));
+    sheet.append(ol);
+    const iso = todayIso();
+    const paint = (globalThis.Trener && Trener.bodyPaint)
+      ? Trener.bodyPaint({ plan: { days: [{ date: iso, exercises: [g] }] }, workouts: [] }, iso)
+      : [];
+    const map = el("div", { class: "guide-map" });
+    map.append(muscleBoard(paint, null));
+    sheet.append(map);
+    const tipBox = el("div", { class: "guide-tips" });
+    tips.forEach((t) => tipBox.append(el("p", {}, t)));
+    sheet.append(tipBox);
+    frag.append(sheet);
+    return frag;
+  }
   function renderProgress() {
     const d = state.data;
     const p = d.progress || {};
@@ -1031,10 +1164,12 @@
         el("p", { class: "big-num" }, String(p.streak || 0)),
         el("span", { class: "trend " + trend, "aria-label": trend === "up" ? "Opp" : trend === "down" ? "Ned" : "Uendret" }, arrow),
       ),
-      el("p", { class: "muted" }, "dager på rad"),
+      el("p", { class: "muted" }, weekRun(d) > 0 ? (weekRun(d) === 1 ? "1 uke på rad" : weekRun(d) + " uker på rad") : "dager på rad"),
     );
     if (state.err) wrap.append(el("div", { class: "err" }, state.err));
     if (state.ok) wrap.append(el("div", { class: "okmsg" }, state.ok));
+    wrap.append(monthCalendar(d));
+    wrap.append(weightRow(d));
     const liftMap = new Map();
     for (const wlog of d.workouts || []) {
       if (!wlog.completed) continue;
@@ -1052,6 +1187,7 @@
       }
     }
     const lifts = [...liftMap.values()].sort((a, b) => b.pts.length - a.pts.length);
+    let moreLift = null;
     if (lifts.length) {
       const i = Math.abs(state.lift || 0) % lifts.length;
       const lift = lifts[i];
@@ -1064,8 +1200,8 @@
         : el("p", { class: "lift-name" }, lift.name);
       const head = el("div", { class: "lift-head" }, name);
       if (isPr) head.append(el("span", { class: "pr-pill" }, "Rekord"));
-      wrap.append(head, svgChart(lift.pts, "#d6ff4a", true, mark));
-    } else wrap.append(svgChart(counts, "#d6ff4a", true));
+      moreLift = el("div", {}, head, svgChart(lift.pts, "#d6ff4a", true, mark));
+    } else moreLift = svgChart(counts, "#d6ff4a", true);
     const weekEx = [];
     const wk = d.week || {};
     for (const w of d.workouts || []) {
@@ -1085,6 +1221,7 @@
     weekMap.append(muscleBoard(weekPaint, () => {}));
     const more = el("details", { class: "more" });
     more.append(el("summary", {}, "Mer"));
+    if (moreLift) more.append(moreLift);
     more.append(weekMap);
     more.append(el("div", { class: "row" },
       el("button", { class: "btn ghost", type: "button", onclick: () => { state.view = "recap"; state.recap = 0; render(); } }, "Ukesrecap"),
@@ -1766,6 +1903,11 @@
     const screen = app.querySelector(".wrap, .story, .boot");
     if (screen && screenKey !== state.screenKey) screen.classList.add("enter");
     state.screenKey = screenKey;
+    if (state.guide) {
+      const sheet = guideSheet();
+      if (sheet) app.append(sheet);
+    }
+    if (state.prFlash) app.append(el("div", { class: "pr-toast", role: "status" }, "Ny rekord!"));
     flushBodies();
     if (state.tab === "chat") {
       const box = document.querySelector(".chat");

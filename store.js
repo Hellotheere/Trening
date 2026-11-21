@@ -475,13 +475,26 @@
     return publicView(state);
   }
 
+  function logWeight(body) {
+    const state = requireState();
+    const kg = Number(String((body && body.kg) || "").replace(",", "."));
+    if (!(kg >= 30 && kg <= 250)) throw new TrenerError("Vekten må være mellom 30 og 250 kg.");
+    const today = T.todayOslo();
+    const weights = (state.weights || []).filter((w) => w.date !== today);
+    weights.push({ date: today, kg: Math.round(kg * 10) / 10 });
+    state.weights = weights.slice(-24);
+    if (state.profile) state.profile.weight_kg = state.weights[state.weights.length - 1].kg;
+    save(state);
+    return publicView(state);
+  }
+
   function reset() {
     localStorage.removeItem(KEY);
     try { localStorage.removeItem(LEGACY_TOKEN); } catch {}
   }
 
   const api = {
-    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay, chooseProgram, logWellness, quickDay,
+    KEY, hasState, me, onboard, checkin, workout, chat, saveCustom, savePrefs, swapDays, markDay, chooseProgram, logWellness, quickDay, logWeight,
     exportJSON, importJSON, reset, publicView, formatError, TrenerError,
   };
   if (typeof globalThis !== "undefined") globalThis.TrenerStore = api;
